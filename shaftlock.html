@@ -947,9 +947,13 @@
     if (!selected) {
       portPanel.hidden = true;
       portPanel.dataset.node = "";
+      nodeLabelInput.dataset.node = "";
       return;
     }
-    if (document.activeElement !== nodeLabelInput) nodeLabelInput.value = selected.label || "";
+    if (nodeLabelInput.dataset.node !== selected.id || document.activeElement !== nodeLabelInput) {
+      nodeLabelInput.dataset.node = selected.id;
+      nodeLabelInput.value = selected.label || "";
+    }
     syncPortPanel(selected);
     if (selected.kind !== "input") return;
     ensureSeries(selected);
