@@ -46,7 +46,7 @@
   <header>
     <div>
       <h1>Shaftlock</h1>
-      <div class="sub">Local file · click block → click canvas → wire orange→left ports → Run</div>
+      <div class="sub">Local file · click block → click canvas → wire top port down to a bottom port → Run</div>
     </div>
     <div class="row">
       <button type="button" id="btnXl">Load XL demo</button>
@@ -60,7 +60,7 @@
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;opacity:.6;margin-bottom:8px;">Blocks</div>
       <div id="palette"></div>
       <label>Input rpm<input id="driveRpm" type="number" value="1" step="any"/></label>
-      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: orange port → left port.<br/>Select an Input on the canvas to change its rpm.<br/>Move: drag a placed block.<br/>Delete: select a block, then Delete or Backspace.<br/>Run: Enter.</p>
+      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: orange port on the top, then a bottom port.<br/>Select an Input on the canvas to change its rpm.<br/>Move: drag a placed block.<br/>Delete: select a block, then Delete or Backspace.<br/>Run: Enter.</p>
     </aside>
     <div id="stage"><canvas id="c"></canvas></div>
   </main>
@@ -591,6 +591,14 @@
     ],
     input: [{ id: "io", label: "" }]
   };
+  var PORT_EDGE = {
+    pgs: { sun: "bottom", ring: "bottom", carrier: "top" },
+    ipgs: { ring: "bottom", sun: "bottom", carrier: "top" },
+    oneWay: { carrier: "bottom", wheel: "top" },
+    xl: { ring: "bottom", sun: "bottom", carrier: "top", "1wm": "top" },
+    inverter: { in: "bottom", out: "top" },
+    input: { io: "top" }
+  };
   function isSourceOnly(kind) {
     return kind === "input";
   }
@@ -685,9 +693,6 @@
   }
 
   // src/standalone/main.ts
-  var W = 168;
-  var ROW = 28;
-  var HDR = 36;
   var PALETTE = [
     { kind: "pgs", title: "PGS" },
     { kind: "ipgs", title: "IPGS" },
@@ -717,39 +722,42 @@
     ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
     draw();
   }
+  function nodeW(n) {
+    return n.kind === "input" ? 96 : 220;
+  }
+  function portEdge(kind, portId) {
+    return PORT_EDGE[kind][portId];
+  }
   function nodeH(n) {
-    return HDR + BLOCK_PORTS[n.kind].length * ROW + 10;
+    const edges = new Set(BLOCK_PORTS[n.kind].map((p) => portEdge(n.kind, p.id)));
+    return edges.has("top") && edges.has("bottom") ? 96 : 56;
   }
-  function portY(n, portId) {
-    const ports = BLOCK_PORTS[n.kind];
-    const i = ports.findIndex((p) => p.id === portId);
-    return n.y + HDR + i * ROW + ROW / 2;
+  function portsOnEdge(n, edge) {
+    return BLOCK_PORTS[n.kind].filter((p) => portEdge(n.kind, p.id) === edge);
   }
-  function portPos(n, portId, side) {
+  function portPos(n, portId) {
+    const edge = portEdge(n.kind, portId);
+    const group = portsOnEdge(n, edge);
+    const i = group.findIndex((p) => p.id === portId);
     return {
-      x: side === "in" ? n.x : n.x + W,
-      y: portY(n, portId)
+      x: n.x + nodeW(n) * (i + 1) / (group.length + 1),
+      y: edge === "top" ? n.y : n.y + nodeH(n),
+      edge
     };
   }
   function hitNode(x, y) {
     for (let i = nodes.length - 1; i >= 0; i--) {
       const n = nodes[i];
-      if (x >= n.x && x <= n.x + W && y >= n.y && y <= n.y + nodeH(n)) return n;
+      if (x >= n.x && x <= n.x + nodeW(n) && y >= n.y && y <= n.y + nodeH(n)) return n;
     }
     return null;
   }
   function hitPort(x, y) {
     for (const n of nodes) {
       for (const p of BLOCK_PORTS[n.kind]) {
-        const out = portPos(n, p.id, "out");
-        if (Math.hypot(x - out.x, y - out.y) < 10) {
-          return { nodeId: n.id, port: p.id, side: "out" };
-        }
-        if (!isSourceOnly(n.kind)) {
-          const inn = portPos(n, p.id, "in");
-          if (Math.hypot(x - inn.x, y - inn.y) < 10) {
-            return { nodeId: n.id, port: p.id, side: "in" };
-          }
+        const pos = portPos(n, p.id);
+        if (Math.hypot(x - pos.x, y - pos.y) < 12) {
+          return { nodeId: n.id, port: p.id, side: pos.edge === "top" ? "out" : "in" };
         }
       }
     }
@@ -791,20 +799,20 @@
       const a = nodes.find((n) => n.id === e.from);
       const b = nodes.find((n) => n.id === e.to);
       if (!a || !b) continue;
-      const p0 = portPos(a, e.fromPort, "out");
-      const p1 = portPos(b, e.toPort, "in");
+      const p0 = portPos(a, e.fromPort);
+      const p1 = portPos(b, e.toPort);
       ctx.strokeStyle = "#0b3a4a";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(p0.x, p0.y);
-      const mx = (p0.x + p1.x) / 2;
-      ctx.bezierCurveTo(mx, p0.y, mx, p1.y, p1.x, p1.y);
+      const my = (p0.y + p1.y) / 2;
+      ctx.bezierCurveTo(p0.x, my, p1.x, my, p1.x, p1.y);
       ctx.stroke();
     }
     if (wireFrom) {
       const a = nodes.find((n) => n.id === wireFrom.nodeId);
       if (a) {
-        const p0 = portPos(a, wireFrom.port, "out");
+        const p0 = portPos(a, wireFrom.port);
         ctx.strokeStyle = "#d97706";
         ctx.setLineDash([6, 4]);
         ctx.beginPath();
@@ -816,13 +824,15 @@
     }
     for (const n of nodes) {
       const hh = nodeH(n);
+      const ww = nodeW(n);
       const selected = n.id === selectedId;
       ctx.fillStyle = "#eef3f7";
       ctx.strokeStyle = selected ? "#d97706" : "#0b3a4a";
       ctx.lineWidth = selected ? 3 : 2;
-      roundRect(n.x, n.y, W, hh, 6);
+      roundRect(n.x, n.y, ww, hh, 6);
       ctx.fill();
       ctx.stroke();
+      ctx.textAlign = "center";
       ctx.fillStyle = "#0b3a4a";
       ctx.font = "600 14px system-ui,sans-serif";
       let title;
@@ -830,33 +840,49 @@
       else if (n.kind === "oneWay") title = "1WM";
       else if (n.kind === "inverter") title = "Inverter";
       else title = n.kind.toUpperCase();
-      ctx.fillText(title, n.x + 12, n.y + 22);
+      ctx.fillText(title, n.x + ww / 2, n.y + hh / 2 + 5);
       for (const p of BLOCK_PORTS[n.kind]) {
-        const y = portY(n, p.id);
-        if (p.label) {
-          ctx.fillStyle = "#14202b";
-          ctx.font = "12px system-ui,sans-serif";
-          ctx.fillText(p.label, n.x + 16, y + 4);
+        const pos = portPos(n, p.id);
+        const rpmText = ((_b = n.results) == null ? void 0 : _b[p.id]) !== void 0 ? `${n.results[p.id]} rpm` : "";
+        ctx.textAlign = "center";
+        if (pos.edge === "top") {
+          if (p.label) {
+            ctx.fillStyle = "#14202b";
+            ctx.font = "12px system-ui,sans-serif";
+            ctx.fillText(p.label, pos.x, n.y + 18);
+          }
+          if (rpmText) {
+            ctx.fillStyle = "#0b3a4a";
+            ctx.font = "11px ui-monospace,monospace";
+            ctx.fillText(rpmText, pos.x, n.y + 32);
+          }
+        } else {
+          if (rpmText) {
+            ctx.fillStyle = "#0b3a4a";
+            ctx.font = "11px ui-monospace,monospace";
+            ctx.fillText(rpmText, pos.x, n.y + hh - 28);
+          }
+          if (p.label) {
+            ctx.fillStyle = "#14202b";
+            ctx.font = "12px system-ui,sans-serif";
+            ctx.fillText(p.label, pos.x, n.y + hh - 12);
+          }
         }
-        if (((_b = n.results) == null ? void 0 : _b[p.id]) !== void 0) {
-          ctx.fillStyle = "#0b3a4a";
-          ctx.font = "11px ui-monospace,monospace";
-          const tx = p.label ? n.x + W - 70 : n.x + 16;
-          ctx.fillText(`${n.results[p.id]} rpm`, tx, y + 4);
-        }
-        if (!isSourceOnly(n.kind)) {
-          ctx.beginPath();
+        ctx.beginPath();
+        if (pos.edge === "top") {
+          ctx.fillStyle = "#d97706";
+          ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
           ctx.fillStyle = "#eef3f7";
           ctx.strokeStyle = "#0b3a4a";
-          ctx.arc(n.x, y, 6, 0, Math.PI * 2);
+          ctx.lineWidth = 2;
+          ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
         }
-        ctx.beginPath();
-        ctx.fillStyle = "#d97706";
-        ctx.arc(n.x + W, y, 6, 0, Math.PI * 2);
-        ctx.fill();
       }
+      ctx.textAlign = "left";
     }
     if (armed) {
       ctx.fillStyle = "rgba(217,119,6,0.12)";
@@ -899,7 +925,7 @@
     const port = hitPort(p.x, p.y);
     if (port && port.side === "out") {
       wireFrom = { nodeId: port.nodeId, port: port.port };
-      setStatus("Click a left-side port on another block to connect.");
+      setStatus("Click a bottom port on another block to connect.");
       draw();
       return;
     }
@@ -935,13 +961,13 @@
       nodes.push({
         id: `${armed.kind}_${seq++}`,
         kind: armed.kind,
-        x: p.x - W / 2,
+        x: p.x - nodeW({ kind: armed.kind }) / 2,
         y: p.y - 20,
         ...armed.kind === "input" ? { rpm: safeRpm } : {}
       });
       selectedId = nodes[nodes.length - 1].id;
       setStatus(
-        armed.kind === "input" ? `Placed Input at ${safeRpm} rpm \u2014 change rpm in the sidebar anytime.` : `Placed ${armed.kind}. Wire orange \u2192 left ports, then Run.`
+        armed.kind === "input" ? `Placed Input at ${safeRpm} rpm \u2014 change rpm in the sidebar anytime.` : `Placed ${armed.kind}. Wire a top port down to a bottom port, then Run.`
       );
       syncRpmPanel();
       draw();
@@ -1001,10 +1027,17 @@
     }
   }
   function loadXl() {
+    const xl = { kind: "xl" };
+    const input = { kind: "input" };
+    const xlX = 180;
+    const xlY = 36;
+    const ringX = xlX + nodeW(xl) / 3;
+    const sunX = xlX + 2 * nodeW(xl) / 3;
+    const inY = xlY + nodeH(xl) + 36;
     nodes = [
-      { id: "in_sun", kind: "input", x: 40, y: 60, rpm: 1 },
-      { id: "in_ring", kind: "input", x: 40, y: 200, rpm: 0 },
-      { id: "xl1", kind: "xl", x: 280, y: 100 }
+      { id: "xl1", kind: "xl", x: xlX, y: xlY },
+      { id: "in_ring", kind: "input", x: ringX - nodeW(input) / 2, y: inY, rpm: 0 },
+      { id: "in_sun", kind: "input", x: sunX - nodeW(input) / 2, y: inY, rpm: 1 }
     ];
     wires = [
       { id: "e1", from: "in_sun", fromPort: "io", to: "xl1", toPort: "sun" },
