@@ -70,6 +70,9 @@
     <div class="row">
       <button type="button" id="btnXl">Load XL demo</button>
       <button type="button" id="btnClear">Clear</button>
+      <button type="button" id="btnSave">Save</button>
+      <button type="button" id="btnUpload">Upload</button>
+      <input id="fileUpload" type="file" accept="application/json,.json" hidden>
       <button type="button" id="btnUnselect">Unselect</button>
       <button type="button" id="btnRun" class="primary">Run</button>
       <button type="button" id="btnShowTable" hidden>Show table</button>
@@ -96,7 +99,7 @@
           <div id="seriesBox"></div>
         </div>
       </div>
-      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.</p>
+      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.<br/>Save writes a JSON file of this diagram, the scenario lists, and the results. Upload reads one back.</p>
     </aside>
     <div id="stage"><canvas id="c"></canvas></div>
   </main>
@@ -1781,8 +1784,164 @@
     if (bad) setStatus(`Ran ${scenarioCount} scenarios. ${bad} ${bad === 1 ? "has" : "have"} no solution.`, true);
     else setStatus(`Ran ${scenarioCount} scenarios. Tick a port to add a column.`);
   }
+  function bumpSeq(id) {
+    const match = String(id).match(/(\d+)$/);
+    if (match) seq = Math.max(seq, Number(match[1]) + 1);
+  }
+  function snapshot() {
+    return {
+      kind: "shaftlock",
+      version: 1,
+      scenarioCount,
+      view: { panX, panY, zoom },
+      nodes: nodes.map((n) => ({
+        id: n.id,
+        kind: n.kind,
+        x: n.x,
+        y: n.y,
+        label: n.label || "",
+        portLabels: { ...n.portLabels || {} },
+        tablePorts: { ...n.tablePorts || {} },
+        ...n.kind === "input" ? { shape: n.shape || "zeros", series: (n.series || []).slice() } : {}
+      })),
+      wires: wires.map((w) => ({
+        id: w.id,
+        from: w.from,
+        fromPort: w.fromPort,
+        to: w.to,
+        toPort: w.toPort,
+        points: (w.points || []).map((p) => ({ x: p.x, y: p.y }))
+      })),
+      columnOrder: columnOrder.slice(),
+      tableClosed,
+      activeScenario,
+      ran: scenarioRows.length > 0,
+      solutionIndexes: scenarioRows.map((row) => row.solutionIndex || 0)
+    };
+  }
+  function saveFile() {
+    const blob = new Blob([JSON.stringify(snapshot(), null, 2)], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "shaftlock.json";
+    link.click();
+    URL.revokeObjectURL(link.href);
+    setStatus("Saved shaftlock.json.");
+  }
+  function applySnapshot(data) {
+    if (!data || data.kind !== "shaftlock" || !Array.isArray(data.nodes) || !Array.isArray(data.wires)) {
+      setStatus("That file is not a Shaftlock configuration.", true);
+      return;
+    }
+    const kinds = new Set(["pgs", "ipgs", "xl", "input"]);
+    const shapes = new Set(["zeros", "ones", "count0", "count1", "count2", "custom"]);
+    for (const n of data.nodes) {
+      if (!n || typeof n.id !== "string" || !kinds.has(n.kind)) {
+        setStatus("That file has a block this page cannot place.", true);
+        return;
+      }
+    }
+    const ids = new Set(data.nodes.map((n) => n.id));
+    if (ids.size !== data.nodes.length) {
+      setStatus("That file repeats a block id.", true);
+      return;
+    }
+    for (const w of data.wires) {
+      if (!w || !ids.has(w.from) || !ids.has(w.to)) {
+        setStatus("That file has a wire to a missing block.", true);
+        return;
+      }
+    }
+    scenarioCount = Math.min(64, Math.max(1, Math.round(Number(data.scenarioCount)) || 1));
+    countInput.value = String(scenarioCount);
+    nodes = data.nodes.map((n) => {
+      const made = {
+        id: n.id,
+        kind: n.kind,
+        x: Number(n.x) || 0,
+        y: Number(n.y) || 0,
+        label: typeof n.label === "string" ? n.label : "",
+        portLabels: n.portLabels && typeof n.portLabels === "object" ? { ...n.portLabels } : {},
+        tablePorts: n.tablePorts && typeof n.tablePorts === "object" ? { ...n.tablePorts } : {}
+      };
+      if (n.kind === "input") {
+        made.shape = shapes.has(n.shape) ? n.shape : "custom";
+        made.series = Array.isArray(n.series) ? n.series.map((v) => Number.isFinite(Number(v)) ? Number(v) : 0) : [];
+        ensureSeries(made);
+        made.rpm = made.series[0] || 0;
+      }
+      return made;
+    });
+    wires = data.wires.map((w) => ({
+      id: typeof w.id === "string" ? w.id : `w${seq++}`,
+      from: w.from,
+      fromPort: w.fromPort,
+      to: w.to,
+      toPort: w.toPort,
+      points: Array.isArray(w.points) ? w.points.map((p) => ({ x: Number(p.x) || 0, y: Number(p.y) || 0 })) : []
+    }));
+    columnOrder = Array.isArray(data.columnOrder) ? data.columnOrder.filter((key) => typeof key === "string") : [];
+    const view = data.view || {};
+    panX = Number.isFinite(Number(view.panX)) ? Number(view.panX) : 0;
+    panY = Number.isFinite(Number(view.panY)) ? Number(view.panY) : 0;
+    zoom = Number(view.zoom);
+    if (!Number.isFinite(zoom) || zoom < 0.3 || zoom > 4) zoom = 1;
+    seq = 1;
+    for (const n of nodes) bumpSeq(n.id);
+    for (const w of wires) bumpSeq(w.id);
+    armed = null;
+    selectedId = null;
+    selectedWireId = null;
+    selectedCorner = null;
+    wireFrom = null;
+    const wantClosed = !!data.tableClosed;
+    const wantScenario = Math.min(scenarioCount - 1, Math.max(0, Math.round(Number(data.activeScenario)) || 0));
+    const indexes = Array.isArray(data.solutionIndexes) ? data.solutionIndexes : [];
+    renderPalette();
+    if (data.ran) {
+      run();
+      scenarioRows.forEach((row, i) => {
+        if (!row.ok || !row.sets) return;
+        const picked = Math.round(Number(indexes[i]));
+        row.solutionIndex = Math.min(row.sets.length - 1, Math.max(0, Number.isFinite(picked) ? picked : 0));
+      });
+      showScenario(wantScenario);
+      if (wantClosed) {
+        tableClosed = true;
+        syncTableChrome();
+        resize();
+      }
+      setStatus(`Loaded configuration and ${scenarioCount} scenarios.`);
+      return;
+    }
+    scenarioRows = [];
+    solutionSets = [];
+    tableClosed = false;
+    hideSolutionButtons(false);
+    syncTableChrome();
+    syncRpmPanel();
+    draw();
+    setStatus("Loaded configuration.");
+  }
   document.getElementById("btnXl").onclick = loadXl;
   document.getElementById("btnClear").onclick = clearAll;
+  document.getElementById("btnSave").onclick = saveFile;
+  document.getElementById("btnUpload").onclick = () => document.getElementById("fileUpload").click();
+  document.getElementById("fileUpload").addEventListener("change", () => {
+    const input = document.getElementById("fileUpload");
+    const file = input.files && input.files[0];
+    input.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        applySnapshot(JSON.parse(String(reader.result)));
+      } catch (e) {
+        setStatus("That file is not valid JSON.", true);
+      }
+    };
+    reader.readAsText(file);
+  });
   document.getElementById("btnRun").onclick = run;
   document.getElementById("btnHideTable").onclick = () => {
     tableClosed = true;
