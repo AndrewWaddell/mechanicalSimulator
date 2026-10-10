@@ -53,6 +53,8 @@
       <button type="button" id="btnClear">Clear</button>
       <button type="button" id="btnUnselect">Unselect</button>
       <button type="button" id="btnRun" class="primary">Run</button>
+      <button type="button" id="btnPrevSol" hidden>Previous solution</button>
+      <button type="button" id="btnNextSol" hidden>Next solution</button>
     </div>
   </header>
   <main>
@@ -60,7 +62,7 @@
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;opacity:.6;margin-bottom:8px;">Blocks</div>
       <div id="palette"></div>
       <label>Input rpm<input id="driveRpm" type="number" value="1" step="any"/></label>
-      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: orange port on the top, then a bottom port.<br/>Select an Input on the canvas to change its rpm.<br/>Move: drag a placed block.<br/>Delete: select a block, then Delete or Backspace.<br/>Run: Enter.</p>
+      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: orange port on the top, then a bottom port.<br/>Select an Input on the canvas to change its rpm.<br/>Move: drag a placed block.<br/>Delete: select a block, then Delete or Backspace.<br/>Run: Enter.<br/>Multiple solutions: Previous and Next, or [ and ].</p>
     </aside>
     <div id="stage"><canvas id="c"></canvas></div>
   </main>
@@ -129,6 +131,44 @@
     }
     for (let i = 0; i < n; i++) AtA[i][i] += ridge;
     return solveLinear(AtA, Atb);
+  }
+  function nullspaceBasis(A) {
+    const m = A.length;
+    const n = m ? A[0].length : 0;
+    if (!n) return [];
+    const M = A.map((row) => row.slice());
+    const pivotCol = [];
+    let row = 0;
+    for (let col = 0; col < n && row < m; col++) {
+      let piv = row;
+      for (let i = row + 1; i < m; i++) {
+        if (Math.abs(M[i][col]) > Math.abs(M[piv][col])) piv = i;
+      }
+      if (Math.abs(M[piv][col]) < 1e-9) continue;
+      const swap = M[row];
+      M[row] = M[piv];
+      M[piv] = swap;
+      const div = M[row][col];
+      for (let j = col; j < n; j++) M[row][j] /= div;
+      for (let i = 0; i < m; i++) {
+        if (i === row) continue;
+        const f = M[i][col];
+        if (Math.abs(f) < 1e-12) continue;
+        for (let j = col; j < n; j++) M[i][j] -= f * M[row][j];
+      }
+      pivotCol.push(col);
+      row++;
+    }
+    const used = new Set(pivotCol);
+    const basis = [];
+    for (let free = 0; free < n; free++) {
+      if (used.has(free)) continue;
+      const v = Array(n).fill(0);
+      v[free] = 1;
+      for (let r = 0; r < pivotCol.length; r++) v[pivotCol[r]] = -M[r][free];
+      basis.push(v);
+    }
+    return basis;
   }
 
   // src/lib/solver/solve.ts
@@ -284,7 +324,20 @@
       const id = shafts[si].id;
       if (Math.abs(omega[id]) < 1e-8) pinnedIdle.push(id);
     }
-    return { omega, tauExt, lambdas, pinnedIdle };
+    const nullOmegas = [];
+    for (const v of nullspaceBasis(A)) {
+      const delta = {};
+      let mag = 0;
+      for (const si of freeOmegaIdx) {
+        const d = v[freeVarOf.get(si)];
+        if (Math.abs(d) > 1e-7) {
+          delta[shafts[si].id] = d;
+          mag = Math.max(mag, Math.abs(d));
+        }
+      }
+      if (mag > 1e-7) nullOmegas.push(delta);
+    }
+    return { omega, tauExt, lambdas, pinnedIdle, nullOmegas };
   }
   function modeValid(mech, modes, lambdas, omega) {
     for (let k = 0; k < mech.oneWays.length; k++) {
@@ -381,6 +434,37 @@
       };
     }
     return null;
+  }
+  function solveAll(mech) {
+    const n = mech.oneWays.length;
+    if (n > 8) {
+      const one = solveMechanism(mech);
+      return one && one.ok ? [one] : [];
+    }
+    const out = [];
+    const limit = 1 << n;
+    for (let mask = 0; mask < limit; mask++) {
+      const modes = [];
+      for (let k = 0; k < n; k++) modes.push(mask & 1 << k ? "engaged" : "free");
+      const sol = solveModes(mech, modes);
+      if (!sol) continue;
+      if (!modeValid(mech, modes, sol.lambdas, sol.omega)) continue;
+      out.push({
+        ok: true,
+        omega: sol.omega,
+        tauExt: sol.tauExt,
+        oneWays: mech.oneWays.map((ow, k) => ({
+          id: ow.id,
+          engagement: modes[k] === "engaged" ? "engaged" : "slip",
+          lambda: Math.max(0, sol.lambdas[k]),
+          slip: slipVelocity(ow, sol.omega)
+        })),
+        pinnedIdle: sol.pinnedIdle,
+        nullOmegas: sol.nullOmegas || [],
+        modes
+      });
+    }
+    return out;
   }
 
   // src/lib/solver/blocks.ts
@@ -1046,6 +1130,8 @@
     armed = null;
     selectedId = null;
     setStatus("XL demo loaded \u2014 click Run (ring 0, sun 1 \u2192 carrier \u22121, 1WM slips).");
+    solutionSets = [];
+    hideSolutionButtons(false);
     renderPalette();
     syncRpmPanel();
     draw();
@@ -1057,8 +1143,92 @@
     selectedId = null;
     wireFrom = null;
     setStatus("Cleared. Click a block, then click the canvas.");
+    solutionSets = [];
+    hideSolutionButtons(false);
     renderPalette();
     syncRpmPanel();
+    draw();
+  }
+  var solutionSets = [];
+  var solutionIndex = 0;
+  var solutionPorts = {};
+  function hideSolutionButtons(show) {
+    document.getElementById("btnPrevSol").hidden = !show;
+    document.getElementById("btnNextSol").hidden = !show;
+  }
+  function fmtRpm(rpm) {
+    return Math.abs(rpm) < 1e-6 ? "0" : rpm.toFixed(3).replace(/\.?0+$/, "");
+  }
+  function portName(key) {
+    const split = key.indexOf(":");
+    const nodeId = key.slice(0, split);
+    const portId = key.slice(split + 1);
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) return portId;
+    const port = BLOCK_PORTS[node.kind].find((p) => p.id === portId);
+    const block = node.kind === "input" ? "Input" : node.kind === "oneWay" ? "1WM" : node.kind === "inverter" ? "Inverter" : node.kind.toUpperCase();
+    return port && port.label ? `${block} ${port.label}` : block;
+  }
+  function rangeText(name, rpm0, slope, lo, hi) {
+    const toRpm = (t) => rpm0 + slope * t;
+    const finiteLo = lo > -1e8;
+    const finiteHi = hi < 1e8;
+    if (!finiteLo && !finiteHi) return `${name} is not fixed`;
+    let rLo;
+    let rHi;
+    if (slope >= 0) {
+      rLo = finiteLo ? toRpm(lo) : -Infinity;
+      rHi = finiteHi ? toRpm(hi) : Infinity;
+    } else {
+      rLo = finiteHi ? toRpm(hi) : -Infinity;
+      rHi = finiteLo ? toRpm(lo) : Infinity;
+    }
+    if (rLo === -Infinity) return `${name} can be any speed \u2264 ${fmtRpm(rHi)} rpm`;
+    if (rHi === Infinity) return `${name} can be any speed \u2265 ${fmtRpm(rLo)} rpm`;
+    return `${name} can be anywhere from ${fmtRpm(rLo)} to ${fmtRpm(rHi)} rpm`;
+  }
+  function freedomText(set) {
+    const f = set.freedom;
+    if (!f || !solutionPorts) return "";
+    const shafts = f.kind === "many" ? f.shafts : Object.keys(f.dir);
+    const names = [];
+    for (const sid of shafts) {
+      for (const [key, id] of Object.entries(solutionPorts)) {
+        if (id === sid) names.push({ name: portName(key), sid });
+      }
+    }
+    if (!names.length) return "";
+    if (f.kind === "many") {
+      const list = names.map((n) => n.name).join(", ");
+      return `${list} ${names.length > 1 ? "are" : "is"} not fixed.`;
+    }
+    const bits = [];
+    for (const { name, sid } of names) {
+      const slope = radToRpm(f.dir[sid] || 0);
+      if (Math.abs(slope) < 1e-6) continue;
+      bits.push(rangeText(name, radToRpm(set.omega[sid]), slope, f.lo, f.hi));
+    }
+    if (!bits.length) return "";
+    return `${bits.join("; ")}. Shown is the smallest-magnitude set.`;
+  }
+  function applySolution(index) {
+    if (!solutionSets.length) return;
+    solutionIndex = (index + solutionSets.length) % solutionSets.length;
+    const set = solutionSets[solutionIndex];
+    for (const n of nodes) {
+      n.results = {};
+      for (const p of BLOCK_PORTS[n.kind]) {
+        const sid = solutionPorts[`${n.id}:${p.id}`];
+        if (sid !== void 0 && set.omega[sid] !== void 0) n.results[p.id] = fmtRpm(radToRpm(set.omega[sid]));
+      }
+    }
+    const count = solutionSets.length;
+    const ow = set.oneWays.map((o) => o.engagement).join(", ");
+    const head = count > 1 ? `Solution ${solutionIndex + 1} of ${count}. ` : "Solved. ";
+    const clutch = ow ? `1WM: ${ow}. ` : "";
+    const extra = freedomText(set);
+    setStatus(`${head}${clutch}${extra}`.trim());
+    hideSolutionButtons(count > 1);
     draw();
   }
   function run() {
@@ -1074,34 +1244,52 @@
       target: w.to,
       targetHandle: w.toPort
     }));
-    const { compose, solve } = runGraph(specs, edgeSpecs);
+    const compose = composeGraph(specs, edgeSpecs);
     if (!compose.ok) {
+      solutionSets = [];
+      hideSolutionButtons(false);
       setStatus(compose.error);
       return;
     }
-    if (!solve || !solve.ok) {
-      setStatus(solve && !solve.ok ? solve.error : "Solve failed");
+    const sets = solveAll(compose.mechanism);
+    if (!sets.length) {
+      solutionSets = [];
+      hideSolutionButtons(false);
+      setStatus("No solution.");
       return;
     }
-    for (const n of nodes) {
-      n.results = {};
-      for (const p of BLOCK_PORTS[n.kind]) {
-        const sid = compose.portShaft[`${n.id}:${p.id}`];
-        if (sid !== void 0) {
-          const rpm = radToRpm(solve.omega[sid]);
-          n.results[p.id] = Math.abs(rpm) < 1e-6 ? "0" : rpm.toFixed(3).replace(/\.?0+$/, "");
+    for (const set of sets) {
+      const dirs = set.nullOmegas || [];
+      if (dirs.length > 1) {
+        const shafts = /* @__PURE__ */ new Set();
+        for (const dir of dirs) {
+          for (const id of Object.keys(dir)) shafts.add(id);
         }
+        set.freedom = { kind: "many", shafts: [...shafts] };
+      } else if (dirs.length === 1) {
+        const dir = dirs[0];
+        let lo = -Infinity;
+        let hi = Infinity;
+        for (let k = 0; k < set.modes.length; k++) {
+          if (set.modes[k] !== "free") continue;
+          const ow = compose.mechanism.oneWays[k];
+          const v0 = slipVelocity(ow, set.omega);
+          const dv = engageSign(ow) * ((dir[ow.carrierShaft] || 0) - (dir[ow.wheelShaft] || 0));
+          if (dv > 1e-9) hi = Math.min(hi, -v0 / dv);
+          else if (dv < -1e-9) lo = Math.max(lo, -v0 / dv);
+        }
+        set.freedom = { kind: "line", dir, lo, hi };
       }
     }
-    const ow = solve.oneWays.map((o) => `${o.engagement}`).join(", ");
-    setStatus(
-      ow ? `Solved. 1WM: ${ow}` : `Solved ${Object.keys(solve.omega).length} shafts.`
-    );
-    draw();
+    solutionSets = sets;
+    solutionPorts = compose.portShaft;
+    applySolution(0);
   }
   document.getElementById("btnXl").onclick = loadXl;
   document.getElementById("btnClear").onclick = clearAll;
   document.getElementById("btnRun").onclick = run;
+  document.getElementById("btnPrevSol").onclick = () => applySolution(solutionIndex - 1);
+  document.getElementById("btnNextSol").onclick = () => applySolution(solutionIndex + 1);
   document.getElementById("btnUnselect").onclick = () => {
     armed = null;
     setStatus("Place mode off.");
@@ -1120,6 +1308,14 @@
     draw();
   }
   window.addEventListener("keydown", (e) => {
+    if (e.key === "[" || e.key === "]") {
+      const typing = e.target;
+      if (typing && (typing.tagName === "INPUT" || typing.tagName === "TEXTAREA" || typing.isContentEditable)) return;
+      if (solutionSets.length < 2) return;
+      e.preventDefault();
+      applySolution(solutionIndex + (e.key === "]" ? 1 : -1));
+      return;
+    }
     if (e.key === "Enter") {
       e.preventDefault();
       run();
