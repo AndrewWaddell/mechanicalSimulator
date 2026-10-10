@@ -1433,6 +1433,7 @@
     setStatus("Cleared. Click a block, then click the canvas.");
     solutionSets = [];
     scenarioRows = [];
+    columnOrder = [];
     tableClosed = false;
     syncTableChrome();
     hideSolutionButtons(false);
@@ -1671,7 +1672,7 @@
         right.addEventListener("click", () => moveColumn(col.key, 1));
         moves.appendChild(right);
       }
-      if (moves.childNodes.length) th.appendChild(moves);
+      if (moves.children.length) th.appendChild(moves);
       hr.appendChild(th);
     });
     if (!cols.length) {
@@ -1848,8 +1849,10 @@
     if (wireFrom && wireFrom.nodeId === id) wireFrom = null;
     if (selectedWireId && !wires.some((w) => w.id === selectedWireId)) selectedWireId = null;
     selectedId = null;
+    columnOrder = columnOrder.filter((key) => !key.startsWith(`${id}:`));
     setStatus("Removed block.");
     syncRpmPanel();
+    if (scenarioRows.length) renderTruth();
     draw();
   }
   window.addEventListener("keydown", (e) => {
