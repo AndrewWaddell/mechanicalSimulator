@@ -42,7 +42,9 @@
   .shapes button { height: 26px; padding: 0 6px; font-size: 11px; }
   #seriesBox { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
   #seriesBox input { width: 46px; height: 26px; margin: 0; padding: 0 4px; text-align: center; }
-  #truthWrap { max-height: 38vh; overflow: auto; padding: 10px 14px 14px; background: var(--paper); border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); }
+  #truthWrap { max-height: 38vh; overflow: auto; padding: 8px 14px 14px; background: var(--paper); border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); }
+  #truthBar { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+  #truthBar button { height: 26px; }
   #truthChecks label { display: inline-flex; align-items: center; gap: 4px; width: auto; margin: 0; font-size: 12px; opacity: 1; }
   #truthChecks input { width: auto; height: auto; margin: 0; }
   .checkGroup { display: inline-flex; align-items: center; gap: 8px; margin: 0 18px 8px 0; }
@@ -50,6 +52,8 @@
   #truth { border-collapse: collapse; font-size: 13px; }
   #truth th, #truth td { border: 1px solid #9aafbf; padding: 4px 8px; white-space: nowrap; }
   #truth th { background: #e7eef3; text-align: left; }
+  #truth th .moves { display: inline-flex; gap: 2px; margin-left: 6px; vertical-align: middle; }
+  #truth th button { height: 18px; padding: 0 5px; font-size: 11px; }
   #truth td { text-align: right; }
   #truth tbody tr { cursor: pointer; }
   #truth tr.viewing td { background: color-mix(in srgb, var(--signal) 18%, white); }
@@ -68,6 +72,7 @@
       <button type="button" id="btnClear">Clear</button>
       <button type="button" id="btnUnselect">Unselect</button>
       <button type="button" id="btnRun" class="primary">Run</button>
+      <button type="button" id="btnShowTable" hidden>Show table</button>
       <button type="button" id="btnPrevSol" hidden>Previous solution</button>
       <button type="button" id="btnNextSol" hidden>Next solution</button>
     </div>
@@ -91,11 +96,12 @@
           <div id="seriesBox"></div>
         </div>
       </div>
-      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick the ports you want as columns. Click a row to show it on the diagram.</p>
+      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.</p>
     </aside>
     <div id="stage"><canvas id="c"></canvas></div>
   </main>
   <section id="truthWrap" hidden>
+    <div id="truthBar"><button type="button" id="btnHideTable">Hide table</button></div>
     <div id="truthChecks"></div>
     <div id="truthScroll"><table id="truth"></table></div>
   </section>
@@ -832,6 +838,8 @@
   var seq = 1;
   var scenarioCount = 8;
   var scenarioRows = [];
+  var columnOrder = [];
+  var tableClosed = false;
   var activeScenario = 0;
   var canvas = document.getElementById("c");
   var ctx = canvas.getContext("2d");
@@ -959,7 +967,8 @@
         selected.series[i] = v;
         selected.rpm = selected.series[0];
         scenarioRows = [];
-        document.getElementById("truthWrap").hidden = true;
+        tableClosed = false;
+        syncTableChrome();
       });
       seriesBox.appendChild(field);
     });
@@ -1406,7 +1415,9 @@
     setStatus("XL demo loaded \u2014 click Run (ring 0, sun 1 \u2192 carrier \u22121, 1WM slips).");
     solutionSets = [];
     scenarioRows = [];
-    document.getElementById("truthWrap").hidden = true;
+    columnOrder = [];
+    tableClosed = false;
+    syncTableChrome();
     hideSolutionButtons(false);
     renderPalette();
     syncRpmPanel();
@@ -1422,7 +1433,8 @@
     setStatus("Cleared. Click a block, then click the canvas.");
     solutionSets = [];
     scenarioRows = [];
-    document.getElementById("truthWrap").hidden = true;
+    tableClosed = false;
+    syncTableChrome();
     hideSolutionButtons(false);
     renderPalette();
     syncRpmPanel();
@@ -1554,31 +1566,46 @@
     };
   }
   function tableColumns() {
-    const ordered = [
-      ...nodes.filter((n) => n.kind === "input"),
-      ...nodes.filter((n) => n.kind !== "input")
-    ];
-    const cols = [];
-    for (const n of ordered) {
+    const live = /* @__PURE__ */ new Map();
+    for (const n of nodes) {
       const ports = BLOCK_PORTS[n.kind];
       for (const p of ports) {
         if (!n.tablePorts || !n.tablePorts[p.id]) continue;
+        const key = `${n.id}:${p.id}`;
         const name = portDisplay(n, p);
-        cols.push({
-          key: `${n.id}:${p.id}`,
+        live.set(key, {
+          key,
           input: n.kind === "input",
           node: n,
           head: ports.length === 1 ? blockTitle(n) : `${blockTitle(n)} ${name}`
         });
       }
     }
-    return cols;
+    columnOrder = columnOrder.filter((key) => live.has(key));
+    for (const key of live.keys()) {
+      if (!columnOrder.includes(key)) columnOrder.push(key);
+    }
+    return columnOrder.map((key) => live.get(key));
+  }
+  function moveColumn(key, dir) {
+    const i = columnOrder.indexOf(key);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= columnOrder.length) return;
+    const swap = columnOrder[i];
+    columnOrder[i] = columnOrder[j];
+    columnOrder[j] = swap;
+    renderTruth();
+  }
+  function syncTableChrome() {
+    const has = scenarioRows.length > 0;
+    document.getElementById("truthWrap").hidden = !has || tableClosed;
+    document.getElementById("btnShowTable").hidden = !has || !tableClosed;
   }
   function renderTruth() {
-    const wrap = document.getElementById("truthWrap");
+    syncTableChrome();
+    if (!scenarioRows.length || tableClosed) return;
     const checks = document.getElementById("truthChecks");
     const table = document.getElementById("truth");
-    wrap.hidden = scenarioRows.length === 0;
     checks.innerHTML = "";
     const orderedNodes = [
       ...nodes.filter((n) => n.kind === "input"),
@@ -1601,7 +1628,13 @@
         box.checked = !!(n.tablePorts && n.tablePorts[p.id]);
         box.addEventListener("change", () => {
           if (!n.tablePorts) n.tablePorts = {};
+          const key = `${n.id}:${p.id}`;
           n.tablePorts[p.id] = box.checked;
+          if (box.checked) {
+            if (!columnOrder.includes(key)) columnOrder.push(key);
+          } else {
+            columnOrder = columnOrder.filter((item) => item !== key);
+          }
           renderTruth();
         });
         label.appendChild(box);
@@ -1617,11 +1650,30 @@
     const corner = document.createElement("th");
     corner.textContent = "Scenario";
     hr.appendChild(corner);
-    for (const col of cols) {
+    cols.forEach((col, index) => {
       const th = document.createElement("th");
-      th.textContent = col.head;
+      th.appendChild(document.createTextNode(col.head));
+      const moves = document.createElement("span");
+      moves.className = "moves";
+      if (index > 0) {
+        const left = document.createElement("button");
+        left.type = "button";
+        left.textContent = "\u2190";
+        left.title = "Move left";
+        left.addEventListener("click", () => moveColumn(col.key, -1));
+        moves.appendChild(left);
+      }
+      if (index < cols.length - 1) {
+        const right = document.createElement("button");
+        right.type = "button";
+        right.textContent = "\u2192";
+        right.title = "Move right";
+        right.addEventListener("click", () => moveColumn(col.key, 1));
+        moves.appendChild(right);
+      }
+      if (moves.childNodes.length) th.appendChild(moves);
       hr.appendChild(th);
-    }
+    });
     if (!cols.length) {
       const th = document.createElement("th");
       th.textContent = "Tick a port above to add a column";
@@ -1704,7 +1756,7 @@
     scenarioRows = [];
     for (let i = 0; i < scenarioCount; i++) scenarioRows.push(solveScenario(i));
     const bad = scenarioRows.filter((row) => !row.ok).length;
-    document.getElementById("truthWrap").hidden = false;
+    tableClosed = false;
     if (scenarioRows[0] && scenarioRows[0].ok) showScenario(0);
     else {
       activeScenario = 0;
@@ -1720,6 +1772,16 @@
   document.getElementById("btnXl").onclick = loadXl;
   document.getElementById("btnClear").onclick = clearAll;
   document.getElementById("btnRun").onclick = run;
+  document.getElementById("btnHideTable").onclick = () => {
+    tableClosed = true;
+    syncTableChrome();
+    resize();
+  };
+  document.getElementById("btnShowTable").onclick = () => {
+    tableClosed = false;
+    renderTruth();
+    resize();
+  };
   document.getElementById("btnPrevSol").onclick = () => applySolution(solutionIndex - 1);
   document.getElementById("btnNextSol").onclick = () => applySolution(solutionIndex + 1);
   document.getElementById("btnUnselect").onclick = () => {
@@ -1739,7 +1801,8 @@
     countInput.value = String(scenarioCount);
     for (const n of nodes) ensureSeries(n);
     scenarioRows = [];
-    document.getElementById("truthWrap").hidden = true;
+    tableClosed = false;
+    syncTableChrome();
     syncRpmPanel();
   });
   nodeLabelInput.addEventListener("input", () => {
@@ -1758,7 +1821,8 @@
     n.series = fillSeries(n.shape, scenarioCount);
     n.rpm = n.series[0] || 0;
     scenarioRows = [];
-    document.getElementById("truthWrap").hidden = true;
+    tableClosed = false;
+    syncTableChrome();
     syncRpmPanel();
   });
   function deleteSelected() {
