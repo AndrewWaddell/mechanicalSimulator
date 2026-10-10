@@ -46,7 +46,7 @@
   <header>
     <div>
       <h1>Shaftlock</h1>
-      <div class="sub">Local file · click block → click canvas → wire top port down to a bottom port → Run</div>
+      <div class="sub">Local file · click any port, click corners, click another port → Run</div>
     </div>
     <div class="row">
       <button type="button" id="btnXl">Load XL demo</button>
@@ -62,7 +62,7 @@
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;opacity:.6;margin-bottom:8px;">Blocks</div>
       <div id="palette"></div>
       <label>Input rpm<input id="driveRpm" type="number" value="1" step="any"/></label>
-      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: orange port on the top, then a bottom port. Click a wire, then Delete.<br/>Drag a block to move it. Drag empty canvas to pan. Pinch to zoom.<br/>Select an Input on the canvas to change its rpm.<br/>Run: Enter.<br/>Multiple solutions: Previous and Next, or [ and ].</p>
+      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Drag a block to move it. Drag empty canvas to pan. Pinch to zoom.<br/>Select an Input on the canvas to change its rpm.<br/>Run: Enter.<br/>Multiple solutions: Previous and Next, or [ and ].</p>
     </aside>
     <div id="stage"><canvas id="c"></canvas></div>
   </main>
@@ -790,8 +790,10 @@
   var armed = null;
   var selectedId = null;
   var selectedWireId = null;
+  var selectedCorner = null;
   var wireFrom = null;
   var drag = null;
+  var cornerDrag = null;
   var panDrag = null;
   var panX = 0;
   var panY = 0;
@@ -846,14 +848,16 @@
       for (const p of BLOCK_PORTS[n.kind]) {
         const pos = portPos(n, p.id);
         if (Math.hypot(x - pos.x, y - pos.y) < 12 / zoom) {
-          return { nodeId: n.id, port: p.id, side: pos.edge === "top" ? "out" : "in" };
+          return { nodeId: n.id, port: p.id };
         }
       }
     }
     return null;
   }
-  function setStatus(s) {
+  function setStatus(s, bad) {
     statusEl.textContent = s;
+    statusEl.style.color = bad ? "#9a3412" : "";
+    statusEl.style.fontWeight = bad ? "700" : "";
   }
   function syncRpmPanel() {
     var _a, _b;
@@ -907,30 +911,39 @@
       ctx.stroke();
     }
     for (const e of wires) {
-      const a = nodes.find((n) => n.id === e.from);
-      const b = nodes.find((n) => n.id === e.to);
-      if (!a || !b) continue;
-      const p0 = portPos(a, e.fromPort);
-      const p1 = portPos(b, e.toPort);
+      const pts = wirePoints(e);
+      if (!pts) continue;
       ctx.strokeStyle = e.id === selectedWireId ? "#d97706" : "#0b3a4a";
-      ctx.lineWidth = e.id === selectedWireId ? 3 : 2;
+      ctx.lineWidth = e.id === selectedWireId ? 3 : 2.5;
       ctx.beginPath();
-      ctx.moveTo(p0.x, p0.y);
-      const my = (p0.y + p1.y) / 2;
-      ctx.bezierCurveTo(p0.x, my, p1.x, my, p1.x, p1.y);
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
       ctx.stroke();
+      const corners = e.points || [];
+      for (let i = 0; i < corners.length; i++) {
+        const hot = selectedCorner && selectedCorner.id === e.id && selectedCorner.index === i;
+        const s = (hot ? 6 : 4) / zoom;
+        ctx.fillStyle = hot || e.id === selectedWireId ? "#d97706" : "#0b3a4a";
+        ctx.fillRect(corners[i].x - s, corners[i].y - s, s * 2, s * 2);
+      }
     }
     if (wireFrom) {
       const a = nodes.find((n) => n.id === wireFrom.nodeId);
       if (a) {
-        const p0 = portPos(a, wireFrom.port);
+        const pts = [portPos(a, wireFrom.port), ...wireFrom.points, { x: mouse.x, y: mouse.y }];
         ctx.strokeStyle = "#d97706";
+        ctx.lineWidth = 2;
         ctx.setLineDash([6, 4]);
         ctx.beginPath();
-        ctx.moveTo(p0.x, p0.y);
-        ctx.lineTo(mouse.x, mouse.y);
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
         ctx.stroke();
         ctx.setLineDash([]);
+        for (const c of wireFrom.points) {
+          const s = 4 / zoom;
+          ctx.fillStyle = "#d97706";
+          ctx.fillRect(c.x - s, c.y - s, s * 2, s * 2);
+        }
       }
     }
     for (const n of nodes) {
@@ -980,16 +993,14 @@
           }
         }
         ctx.beginPath();
-        if (pos.edge === "top") {
-          ctx.fillStyle = "#d97706";
-          ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          ctx.fillStyle = "#eef3f7";
+        ctx.fillStyle = "#d97706";
+        ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        if (wireFrom && wireFrom.nodeId === n.id && wireFrom.port === p.id) {
+          ctx.beginPath();
           ctx.strokeStyle = "#0b3a4a";
           ctx.lineWidth = 2;
-          ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.arc(pos.x, pos.y, 10, 0, Math.PI * 2);
           ctx.stroke();
         }
       }
@@ -1015,24 +1026,40 @@
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
   }
+  function wirePoints(e) {
+    const a = nodes.find((n) => n.id === e.from);
+    const b = nodes.find((n) => n.id === e.to);
+    if (!a || !b) return null;
+    return [portPos(a, e.fromPort), ...(e.points || []), portPos(b, e.toPort)];
+  }
+  function distToSeg(px, py, ax, ay, bx, by) {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 < 1e-12 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  }
+  function hitCorner(x, y) {
+    const thresh = 8 / zoom;
+    for (let i = wires.length - 1; i >= 0; i--) {
+      const e = wires[i];
+      const corners = e.points || [];
+      for (let k = corners.length - 1; k >= 0; k--) {
+        if (Math.hypot(x - corners[k].x, y - corners[k].y) <= thresh) return { wire: e, index: k };
+      }
+    }
+    return null;
+  }
   function hitWire(x, y) {
     const thresh = 8 / zoom;
     let best = null;
     let bestD = thresh;
     for (let i = wires.length - 1; i >= 0; i--) {
       const e = wires[i];
-      const a = nodes.find((n) => n.id === e.from);
-      const b = nodes.find((n) => n.id === e.to);
-      if (!a || !b) continue;
-      const p0 = portPos(a, e.fromPort);
-      const p1 = portPos(b, e.toPort);
-      const my = (p0.y + p1.y) / 2;
-      for (let s = 0; s <= 28; s++) {
-        const t = s / 28;
-        const u = 1 - t;
-        const px = u * u * u * p0.x + 3 * u * u * t * p0.x + 3 * u * t * t * p1.x + t * t * t * p1.x;
-        const py = u * u * u * p0.y + 3 * u * u * t * my + 3 * u * t * t * my + t * t * t * p1.y;
-        const d = Math.hypot(x - px, y - py);
+      const pts = wirePoints(e);
+      if (!pts) continue;
+      for (let s = 0; s < pts.length - 1; s++) {
+        const d = distToSeg(x, y, pts[s].x, pts[s].y, pts[s + 1].x, pts[s + 1].y);
         if (d < bestD) {
           bestD = d;
           best = e;
@@ -1050,7 +1077,13 @@
     const p = screenToWorld(screen);
     mouse.x = p.x;
     mouse.y = p.y;
-    if (panDrag) {
+    if (cornerDrag) {
+      const w = wires.find((x) => x.id === cornerDrag.id);
+      if (w && w.points[cornerDrag.index]) {
+        w.points[cornerDrag.index].x = p.x;
+        w.points[cornerDrag.index].y = p.y;
+      }
+    } else if (panDrag) {
       panX = panDrag.panX + (screen.x - panDrag.sx);
       panY = panDrag.panY + (screen.y - panDrag.sy);
     } else if (drag) {
@@ -1067,33 +1100,57 @@
     if (e.button !== 0) return;
     const p = localXY(e);
     const port = hitPort(p.x, p.y);
-    if (port && port.side === "out") {
-      wireFrom = { nodeId: port.nodeId, port: port.port };
-      selectedWireId = null;
-      setStatus("Click a bottom port on another block to connect.");
+    if (wireFrom) {
+      if (port) {
+        const same = port.nodeId === wireFrom.nodeId && port.port === wireFrom.port;
+        if (!same) {
+          wires.push({
+            id: `w${seq++}`,
+            from: wireFrom.nodeId,
+            fromPort: wireFrom.port,
+            to: port.nodeId,
+            toPort: port.port,
+            points: wireFrom.points.slice()
+          });
+          setStatus("Wired. Click Run.");
+        } else {
+          setStatus("Wire cancelled.");
+        }
+        wireFrom = null;
+        draw();
+        return;
+      }
+      if (!hitNode(p.x, p.y)) {
+        wireFrom.points.push({ x: p.x, y: p.y });
+        setStatus("Corner added. Click more corners, or click any other port to finish.");
+        draw();
+        return;
+      }
+      return;
+    }
+    const corner = !armed ? hitCorner(p.x, p.y) : null;
+    if (corner) {
+      selectedWireId = corner.wire.id;
+      selectedCorner = { id: corner.wire.id, index: corner.index };
+      selectedId = null;
+      cornerDrag = { id: corner.wire.id, index: corner.index };
+      setStatus("Drag the corner. Delete removes that corner.");
       draw();
       return;
     }
-    if (port && port.side === "in" && wireFrom) {
-      if (port.nodeId !== wireFrom.nodeId) {
-        wires.push({
-          id: `w${seq++}`,
-          from: wireFrom.nodeId,
-          fromPort: wireFrom.port,
-          to: port.nodeId,
-          toPort: port.port
-        });
-        setStatus("Wired. Add more or click Run.");
-      }
-      wireFrom = null;
+    if (port && !armed) {
+      wireFrom = { nodeId: port.nodeId, port: port.port, points: [] };
+      selectedWireId = null;
+      selectedCorner = null;
+      setStatus("Click the canvas to drop corners, then click any other port.");
       draw();
       return;
     }
     const wire = !armed ? hitWire(p.x, p.y) : null;
     if (wire) {
       selectedWireId = wire.id;
+      selectedCorner = null;
       selectedId = null;
-      wireFrom = null;
       setStatus("Wire selected \u2014 press Delete to remove it.");
       draw();
       return;
@@ -1102,6 +1159,7 @@
     if (n && !armed) {
       selectedId = n.id;
       selectedWireId = null;
+      selectedCorner = null;
       drag = { id: n.id, ox: p.x - n.x, oy: p.y - n.y };
       if (n.kind === "input") {
         setStatus(`Input selected \u2014 set rpm in the sidebar (currently ${(_a = n.rpm) != null ? _a : 0}).`);
@@ -1122,8 +1180,9 @@
       });
       selectedId = nodes[nodes.length - 1].id;
       selectedWireId = null;
+      selectedCorner = null;
       setStatus(
-        armed.kind === "input" ? `Placed Input at ${safeRpm} rpm \u2014 change rpm in the sidebar anytime.` : `Placed ${armed.kind}. Wire a top port down to a bottom port, then Run.`
+        armed.kind === "input" ? `Placed Input at ${safeRpm} rpm \u2014 change rpm in the sidebar anytime.` : `Placed ${armed.kind}. Click any port, then any other port.`
       );
       syncRpmPanel();
       draw();
@@ -1131,6 +1190,7 @@
     }
     selectedId = null;
     selectedWireId = null;
+    selectedCorner = null;
     const screen = screenXY(e);
     panDrag = { sx: screen.x, sy: screen.y, panX, panY };
     updateCursor();
@@ -1155,6 +1215,7 @@
   }, { passive: false });
   window.addEventListener("mouseup", () => {
     drag = null;
+    cornerDrag = null;
     panDrag = null;
     updateCursor();
   });
@@ -1360,7 +1421,9 @@
     if (!sets.length) {
       solutionSets = [];
       hideSolutionButtons(false);
-      setStatus("No solution.");
+      for (const n of nodes) n.results = void 0;
+      setStatus("No solution. Connected parts are being driven at different speeds.", true);
+      draw();
       return;
     }
     for (const set of sets) {
@@ -1399,11 +1462,21 @@
     armed = null;
     selectedId = null;
     selectedWireId = null;
+    selectedCorner = null;
+    wireFrom = null;
     setStatus("Place mode off.");
     renderPalette();
     draw();
   };
   function deleteSelected() {
+    if (selectedCorner) {
+      const w = wires.find((x) => x.id === selectedCorner.id);
+      if (w && w.points) w.points.splice(selectedCorner.index, 1);
+      selectedCorner = null;
+      setStatus("Removed corner.");
+      draw();
+      return;
+    }
     if (selectedWireId) {
       wires = wires.filter((w) => w.id !== selectedWireId);
       selectedWireId = null;
@@ -1429,6 +1502,14 @@
       if (solutionSets.length < 2) return;
       e.preventDefault();
       applySolution(solutionIndex + (e.key === "]" ? 1 : -1));
+      return;
+    }
+    if (e.key === "Escape") {
+      if (wireFrom) {
+        wireFrom = null;
+        setStatus("Wire cancelled.");
+        draw();
+      }
       return;
     }
     if (e.key === "Enter") {
