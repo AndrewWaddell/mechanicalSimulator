@@ -34,7 +34,7 @@
   .pal.active { outline: 2px solid var(--signal); background: color-mix(in srgb, var(--signal) 18%, var(--paper)); }
   main { flex: 1; min-height: 0; display: flex; }
   aside { width: 220px; padding: 12px; border-right: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); background: color-mix(in srgb, var(--paper) 70%, transparent); overflow: auto; }
-  #stage { flex: 1; min-width: 0; position: relative; }
+  #stage { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden; }
   canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
   label { display: block; font-size: 11px; opacity: 0.7; margin-top: 10px; }
   input { width: 100%; margin-top: 4px; height: 28px; border-radius: 6px; border: 1px solid #9aafbf; padding: 0 8px; background: var(--paper); }
@@ -42,7 +42,7 @@
   .shapes button { height: 26px; padding: 0 6px; font-size: 11px; }
   #seriesBox { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
   #seriesBox input { width: 46px; height: 26px; margin: 0; padding: 0 4px; text-align: center; }
-  #truthWrap { max-height: 38vh; overflow: auto; padding: 8px 14px 14px; background: var(--paper); border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); }
+  #truthWrap { position: relative; z-index: 2; max-height: 38vh; overflow: auto; padding: 8px 14px 14px; background: var(--paper); border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); }
   #truthBar { display: flex; justify-content: flex-end; margin-bottom: 6px; }
   #truthBar button { height: 26px; }
   #truthChecks label { display: inline-flex; align-items: center; gap: 4px; width: auto; margin: 0; font-size: 12px; opacity: 1; }
@@ -887,10 +887,10 @@
   }
   function resize() {
     const wrap = canvas.parentElement;
-    canvas.width = wrap.clientWidth * devicePixelRatio;
-    canvas.height = wrap.clientHeight * devicePixelRatio;
-    canvas.style.width = wrap.clientWidth + "px";
-    canvas.style.height = wrap.clientHeight + "px";
+    const w = Math.max(1, wrap.clientWidth);
+    const h = Math.max(1, wrap.clientHeight);
+    canvas.width = w * devicePixelRatio;
+    canvas.height = h * devicePixelRatio;
     ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
     draw();
   }
@@ -1598,13 +1598,19 @@
     renderTruth();
   }
   function syncTableChrome() {
+    const wrap = document.getElementById("truthWrap");
+    const wasHidden = wrap.hidden;
     const has = scenarioRows.length > 0;
-    document.getElementById("truthWrap").hidden = !has || tableClosed;
+    wrap.hidden = !has || tableClosed;
     document.getElementById("btnShowTable").hidden = !has || !tableClosed;
+    return wrap.hidden !== wasHidden;
   }
   function renderTruth() {
-    syncTableChrome();
-    if (!scenarioRows.length || tableClosed) return;
+    const layoutChanged = syncTableChrome();
+    if (!scenarioRows.length || tableClosed) {
+      if (layoutChanged) resize();
+      return;
+    }
     const checks = document.getElementById("truthChecks");
     const table = document.getElementById("truth");
     checks.innerHTML = "";
@@ -1706,6 +1712,7 @@
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
+    resize();
   }
   function showScenario(index) {
     activeScenario = index;
