@@ -46,7 +46,8 @@
   #stage { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden; }
   canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
   label { display: block; font-size: 11px; opacity: 0.7; margin-top: 10px; }
-  input { width: 100%; margin-top: 4px; height: 28px; border-radius: 6px; border: 1px solid #9aafbf; padding: 0 8px; background: var(--paper); }
+  select { width: 100%; margin-top: 4px; height: 28px; border-radius: 6px; border: 1px solid #9aafbf; padding: 0 8px; background: var(--paper); }
+  #truth td.mech { white-space: pre-line; line-height: 1.3; }
   .shapes { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
   .shapes button { height: 26px; padding: 0 6px; font-size: 11px; }
   #seriesBox { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
@@ -99,6 +100,12 @@
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;opacity:.6;margin-bottom:8px;">Blocks</div>
       <div id="palette"></div>
       <label>Scenarios<input id="scenarioCount" type="number" min="1" max="64" value="8"></label>
+      <label>Solver
+        <select id="solverMode">
+          <option value="theoretical">Theoretical</option>
+          <option value="mechanical">Mechanical</option>
+        </select>
+      </label>
       <div id="nodePanel" hidden>
         <label>Label<input id="nodeLabel" type="text" placeholder="Name on the diagram"></label>
         <div id="portPanel"></div>
@@ -113,7 +120,7 @@
           <div id="seriesBox"></div>
         </div>
       </div>
-      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.<br/>Save writes a JSON file of this diagram, the scenario lists, and the results. Upload reads one back.</p>
+      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.<br/>Theoretical solves the speeds directly. Mechanical spins the inputs up through springs, inertia, and ratchet friction, and the table adds torque.<br/>Save writes a JSON file of this diagram, the scenario lists, and the results. Upload reads one back.</p>
     </aside>
     <div id="splitter" title="Drag to resize the panel"><span id="showSide">Show panel</span></div>
     <div id="stage"><canvas id="c"></canvas></div>
@@ -856,6 +863,7 @@
   var zoom = 1;
   var seq = 1;
   var scenarioCount = 8;
+  var solverMode = "theoretical";
   var scenarioRows = [];
   var columnOrder = [];
   var tableClosed = false;
@@ -1576,6 +1584,187 @@
     }
     return sets;
   }
+  function solveMechanicalScenario(compose) {
+    const mech = compose.mechanism;
+    const shafts = mech.shafts;
+    const n = shafts.length;
+    const index = new Map(shafts.map((s, i) => [s.id, i]));
+    const inputIdx = [];
+    const target = Array(n).fill(0);
+    for (let i = 0; i < n; i++) {
+      if (shafts[i].omegaKnown !== void 0) {
+        inputIdx.push(i);
+        target[i] = shafts[i].omegaKnown;
+      }
+    }
+    const INERTIA = 0.08;
+    const DRAG = 0.8;
+    const INPUT_DRAG = 0.02;
+    const SPRING_K = 4;
+    const TAU_MAX = 3;
+    const PAWL = 0.01;
+    const DT = 0.02;
+    const W = DT / INERTIA;
+    const maxWind = TAU_MAX / SPRING_K;
+    const gearRows = [];
+    for (const g of mech.gears) {
+      const a = index.get(g.shaftA);
+      const b = index.get(g.shaftB);
+      if (a === void 0 || b === void 0) return { ok: false, error: "Mechanical solver hit a missing gear shaft.", speeds: {}, torques: {}, multiple: false };
+      const J = Array(n).fill(0);
+      J[a] = 1;
+      J[b] = -g.sign * g.ratio;
+      gearRows.push(J);
+    }
+    for (const eq of mech.equalities || []) {
+      const J = Array(n).fill(0);
+      let known = true;
+      for (const t of eq.terms) {
+        const si = index.get(t.shaft);
+        if (si === void 0) {
+          known = false;
+          break;
+        }
+        J[si] += t.coeff;
+      }
+      if (!known) return { ok: false, error: "Mechanical solver hit a missing wire.", speeds: {}, torques: {}, multiple: false };
+      gearRows.push(J);
+    }
+    function project(omega, rows) {
+      const m = rows.length;
+      if (!m) return { omega: omega.slice(), torque: Array(n).fill(0) };
+      const A = zeros(m);
+      const b = Array(m).fill(0);
+      for (let i = 0; i < m; i++) {
+        let jw = 0;
+        for (let k = 0; k < n; k++) jw += rows[i][k] * omega[k];
+        b[i] = -jw;
+        for (let j = 0; j < m; j++) {
+          let dot = 0;
+          for (let k = 0; k < n; k++) dot += rows[i][k] * rows[j][k];
+          A[i][j] = W * dot;
+        }
+      }
+      let lambda = solveLinear(A, b);
+      if (!lambda) lambda = solveMinNorm(A, b, 1e-8);
+      if (!lambda) return null;
+      const next = omega.slice();
+      const torque = Array(n).fill(0);
+      for (let i = 0; i < m; i++) {
+        for (let k = 0; k < n; k++) {
+          next[k] += W * rows[i][k] * lambda[i];
+          torque[k] += rows[i][k] * lambda[i];
+        }
+      }
+      return { omega: next, torque };
+    }
+    let omega = Array(n).fill(0);
+    let windup = Array(n).fill(0);
+    let torque = Array(n).fill(0);
+    let modes = (mech.oneWays || []).map(() => "slip");
+    let settled = 0;
+    const steps = 450;
+    for (let step = 0; step < steps; step++) {
+      const prev = omega.slice();
+      const spring = Array(n).fill(0);
+      const predicted = omega.map((w, i) => {
+        const driven = inputIdx.includes(i);
+        let t = -(driven ? INPUT_DRAG : DRAG) * w;
+        if (driven) {
+          spring[i] = Math.max(-TAU_MAX, Math.min(TAU_MAX, SPRING_K * windup[i]));
+          t += spring[i];
+        }
+        return w + DT * t / INERTIA;
+      });
+      const geared = project(predicted, gearRows);
+      if (!geared) return { ok: false, error: "Mechanical solver could not resolve the contacts.", speeds: {}, torques: {}, multiple: false };
+      const rows = gearRows.slice();
+      const oneWays = mech.oneWays || [];
+      modes = [];
+      for (let k = 0; k < oneWays.length; k++) {
+        const ow = oneWays[k];
+        const c = index.get(ow.carrierShaft);
+        const w = index.get(ow.wheelShaft);
+        const s = engageSign(ow);
+        const v = s * (geared.omega[c] - geared.omega[w]);
+        if (v >= -1e-4) {
+          const J = Array(n).fill(0);
+          J[c] = s;
+          J[w] = -s;
+          rows.push(J);
+          modes.push("engaged");
+        } else modes.push("slip");
+      }
+      const locked = project(predicted, rows);
+      if (!locked) return { ok: false, error: "Mechanical solver could not resolve the contacts.", speeds: {}, torques: {}, multiple: false };
+      omega = locked.omega;
+      torque = spring.map((t, i) => t + locked.torque[i]);
+      for (let k = 0; k < oneWays.length; k++) {
+        if (modes[k] !== "slip") continue;
+        const ow = oneWays[k];
+        const c = index.get(ow.carrierShaft);
+        const w = index.get(ow.wheelShaft);
+        const s = engageSign(ow);
+        const v = s * (omega[c] - omega[w]);
+        if (v >= -1e-5) continue;
+        const wjj = W * 2;
+        const stick = -v / wjj;
+        const applied = Math.min(Math.max(stick, 0), PAWL);
+        omega[c] += W * s * applied;
+        omega[w] += W * -s * applied;
+        torque[c] += s * applied;
+        torque[w] += -s * applied;
+        if (applied >= stick - 1e-6) modes[k] = "engaged";
+      }
+      for (const i of inputIdx) {
+        windup[i] = Math.max(-maxWind, Math.min(maxWind, windup[i] + (target[i] - omega[i]) * DT));
+      }
+      let moved = 0;
+      for (let i = 0; i < n; i++) {
+        if (!Number.isFinite(omega[i]) || Math.abs(omega[i]) > 500) {
+          return { ok: false, error: "Mechanical solver did not settle.", speeds: {}, torques: {}, multiple: false };
+        }
+        moved = Math.max(moved, Math.abs(omega[i] - prev[i]));
+      }
+      settled = moved < 1e-4 ? settled + 1 : 0;
+      if (settled > 40 && step > 80) break;
+    }
+    const omegaMap = {};
+    const tauMap = {};
+    for (let i = 0; i < n; i++) {
+      omegaMap[shafts[i].id] = omega[i];
+      tauMap[shafts[i].id] = torque[i];
+    }
+    const set = {
+      ok: true,
+      omega: omegaMap,
+      tauExt: tauMap,
+      oneWays: (mech.oneWays || []).map((ow, k) => ({
+        id: ow.id,
+        engagement: modes[k] === "engaged" ? "engaged" : "slip",
+        lambda: 0,
+        slip: slipVelocity(ow, omegaMap)
+      })),
+      nullOmegas: [],
+      modes: modes.map((m) => m === "engaged" ? "engaged" : "free")
+    };
+    const speeds = {};
+    const torques = {};
+    for (const [key, sid] of Object.entries(compose.portShaft)) {
+      if (omegaMap[sid] !== void 0) speeds[key] = fmtRpm(radToRpm(omegaMap[sid]));
+      if (tauMap[sid] !== void 0) torques[key] = fmtRpm(tauMap[sid]);
+    }
+    return {
+      ok: true,
+      mechanical: true,
+      sets: [set],
+      portShaft: compose.portShaft,
+      solutionIndex: 0,
+      multiple: false,
+      speeds,
+      torques
+    };
+  }
   function solveScenario(index) {
     for (const n of nodes) ensureSeries(n);
     const specs = nodes.map((n) => ({
@@ -1592,6 +1781,7 @@
     }));
     const compose = composeGraph(specs, edgeSpecs);
     if (!compose.ok) return { ok: false, error: compose.error, speeds: {}, multiple: false };
+    if (solverMode === "mechanical") return solveMechanicalScenario(compose);
     const sets = annotateSets(solveAll(compose.mechanism), compose);
     if (!sets.length) return { ok: false, error: "No solution", speeds: {}, multiple: false };
     return {
@@ -1741,7 +1931,15 @@
       }
       for (const col of cols) {
         const td = document.createElement("td");
-        if (col.input) td.textContent = fmtRpm(col.node.series[i] ?? 0);
+        if (row.mechanical) {
+          td.className = "mech";
+          if (!row.ok) td.textContent = "—";
+          else {
+            const speed = row.speeds[col.key] ?? "";
+            const tau = row.torques && row.torques[col.key];
+            td.textContent = tau === void 0 || tau === "" ? speed : `${speed}\nτ ${tau}`;
+          }
+        } else if (col.input) td.textContent = fmtRpm(col.node.series[i] ?? 0);
         else if (!row.ok) td.textContent = "—";
         else td.textContent = row.speeds[col.key] ?? "";
         tr.appendChild(td);
@@ -1812,6 +2010,7 @@
       renderTruth();
     }
     if (bad) setStatus(`Ran ${scenarioCount} scenarios. ${bad} ${bad === 1 ? "has" : "have"} no solution.`, true);
+    else if (solverMode === "mechanical") setStatus(`Ran ${scenarioCount} scenarios with the mechanical solver. Each cell is speed, then torque.`);
     else setStatus(`Ran ${scenarioCount} scenarios. Tick a port to add a column.`);
   }
   function bumpSeq(id) {
@@ -1846,7 +2045,8 @@
       tableClosed,
       activeScenario,
       ran: scenarioRows.length > 0,
-      solutionIndexes: scenarioRows.map((row) => row.solutionIndex || 0)
+      solutionIndexes: scenarioRows.map((row) => row.solutionIndex || 0),
+      solverMode
     };
   }
   function saveFile() {
@@ -1884,6 +2084,8 @@
     }
     scenarioCount = Math.min(64, Math.max(1, Math.round(Number(data.scenarioCount)) || 1));
     countInput.value = String(scenarioCount);
+    solverMode = data.solverMode === "mechanical" ? "mechanical" : "theoretical";
+    document.getElementById("solverMode").value = solverMode;
     nodes = data.nodes.map((n) => {
       const made = {
         id: n.id,
@@ -2007,6 +2209,10 @@
     if (!sideHidden) return;
     sideHidden = false;
     applySide();
+  });
+  document.getElementById("solverMode").addEventListener("change", (e) => {
+    solverMode = e.target.value === "mechanical" ? "mechanical" : "theoretical";
+    setStatus(solverMode === "mechanical" ? "Mechanical solver selected. Run to spin the inputs up and read torque." : "Theoretical solver selected. Run for the instantaneous speeds.");
   });
   document.getElementById("btnUnselect").onclick = () => {
     armed = null;
