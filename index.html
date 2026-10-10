@@ -2056,7 +2056,29 @@
   });
   window.addEventListener("resize", resize);
   renderPalette();
-  loadXl();
+  applySnapshot({
+    kind: "shaftlock",
+    version: 1,
+    scenarioCount: 4,
+    view: { panX: 0, panY: 0, zoom: 1 },
+    nodes: [
+      { id: "xl_1", kind: "xl", x: 363, y: 337, label: "1", portLabels: { "1wm": "temporary" }, tablePorts: { "1wm": true } },
+      { id: "xl_2", kind: "xl", x: 263, y: 116, label: "2", portLabels: { carrier: "Out" }, tablePorts: { carrier: true } },
+      { id: "input_3", kind: "input", x: 252, y: 512, label: "A", portLabels: {}, tablePorts: { io: true }, shape: "count1", series: [0, 0, 1, 1] },
+      { id: "input_4", kind: "input", x: 460, y: 514, label: "B", portLabels: {}, tablePorts: { io: true }, shape: "count0", series: [0, 1, 0, 1] }
+    ],
+    wires: [
+      { id: "w5", from: "input_4", fromPort: "io", to: "xl_1", toPort: "sun", points: [] },
+      { id: "w6", from: "input_3", fromPort: "io", to: "xl_1", toPort: "ring", points: [] },
+      { id: "w7", from: "input_3", fromPort: "io", to: "xl_2", toPort: "ring", points: [] },
+      { id: "w8", from: "xl_1", fromPort: "1wm", to: "xl_2", toPort: "sun", points: [] }
+    ],
+    columnOrder: ["input_3:io", "input_4:io", "xl_1:1wm", "xl_2:carrier"],
+    tableClosed: false,
+    activeScenario: 0,
+    ran: true,
+    solutionIndexes: [0, 0, 0, 0]
+  });
   syncRpmPanel();
   resize();
 })();
