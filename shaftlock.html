@@ -43,8 +43,10 @@
   #seriesBox { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
   #seriesBox input { width: 46px; height: 26px; margin: 0; padding: 0 4px; text-align: center; }
   #truthWrap { max-height: 38vh; overflow: auto; padding: 10px 14px 14px; background: var(--paper); border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); }
-  #truthChecks label { display: inline-flex; align-items: center; gap: 4px; width: auto; margin: 0 12px 8px 0; font-size: 12px; opacity: 1; }
+  #truthChecks label { display: inline-flex; align-items: center; gap: 4px; width: auto; margin: 0; font-size: 12px; opacity: 1; }
   #truthChecks input { width: auto; height: auto; margin: 0; }
+  .checkGroup { display: inline-flex; align-items: center; gap: 8px; margin: 0 18px 8px 0; }
+  .checkGroup .gname { font-size: 12px; font-weight: 700; }
   #truth { border-collapse: collapse; font-size: 13px; }
   #truth th, #truth td { border: 1px solid #9aafbf; padding: 4px 8px; white-space: nowrap; }
   #truth th { background: #e7eef3; text-align: left; }
@@ -77,6 +79,7 @@
       <label>Scenarios<input id="scenarioCount" type="number" min="1" max="64" value="8"></label>
       <div id="nodePanel" hidden>
         <label>Label<input id="nodeLabel" type="text" placeholder="Name on the diagram"></label>
+        <div id="portPanel"></div>
         <div id="inputPanel" hidden>
           <div class="shapes">
             <button type="button" data-shape="zeros">All 0</button>
@@ -88,7 +91,7 @@
           <div id="seriesBox"></div>
         </div>
       </div>
-      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick a block to give it a column. Click a row to show it on the diagram.</p>
+      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick the ports you want as columns. Click a row to show it on the diagram.</p>
     </aside>
     <div id="stage"><canvas id="c"></canvas></div>
   </main>
@@ -836,6 +839,7 @@
   var countInput = document.getElementById("scenarioCount");
   var nodePanel = document.getElementById("nodePanel");
   var nodeLabelInput = document.getElementById("nodeLabel");
+  var portPanel = document.getElementById("portPanel");
   var inputPanel = document.getElementById("inputPanel");
   var seriesBox = document.getElementById("seriesBox");
   function shapeValue(shape, i) {
@@ -867,6 +871,11 @@
     if (n.kind === "oneWay") return "1WM";
     if (n.kind === "inverter") return "Inverter";
     return n.kind.toUpperCase();
+  }
+  function portDisplay(n, p) {
+    const custom = n.portLabels && n.portLabels[p.id];
+    if (custom && String(custom).trim()) return String(custom).trim();
+    return p.label || p.id;
   }
   function resize() {
     const wrap = canvas.parentElement;
@@ -927,8 +936,13 @@
     const selected = nodes.find((n) => n.id === selectedId);
     nodePanel.hidden = !selected;
     inputPanel.hidden = !selected || selected.kind !== "input";
-    if (!selected) return;
+    if (!selected) {
+      portPanel.hidden = true;
+      portPanel.dataset.node = "";
+      return;
+    }
     if (document.activeElement !== nodeLabelInput) nodeLabelInput.value = selected.label || "";
+    syncPortPanel(selected);
     if (selected.kind !== "input") return;
     ensureSeries(selected);
     seriesBox.innerHTML = "";
@@ -949,6 +963,42 @@
       });
       seriesBox.appendChild(field);
     });
+  }
+  function syncPortPanel(selected) {
+    const ports = BLOCK_PORTS[selected.kind].filter((p) => p.label);
+    if (!ports.length) {
+      portPanel.hidden = true;
+      portPanel.dataset.node = "";
+      portPanel.innerHTML = "";
+      return;
+    }
+    portPanel.hidden = false;
+    if (portPanel.dataset.node !== selected.id) {
+      portPanel.dataset.node = selected.id;
+      portPanel.innerHTML = "";
+      for (const p of ports) {
+        const label = document.createElement("label");
+        label.textContent = p.label;
+        const field = document.createElement("input");
+        field.type = "text";
+        field.dataset.port = p.id;
+        field.placeholder = p.label;
+        field.value = selected.portLabels && selected.portLabels[p.id] || "";
+        field.addEventListener("input", () => {
+          if (!selected.portLabels) selected.portLabels = {};
+          selected.portLabels[p.id] = field.value;
+          draw();
+          if (scenarioRows.length) renderTruth();
+        });
+        label.appendChild(field);
+        portPanel.appendChild(label);
+      }
+    } else {
+      for (const field of portPanel.querySelectorAll("input")) {
+        if (document.activeElement === field) continue;
+        field.value = selected.portLabels && selected.portLabels[field.dataset.port] || "";
+      }
+    }
   }
   function screenToWorld(p) {
     return { x: (p.x - panX) / zoom, y: (p.y - panY) / zoom };
@@ -1052,10 +1102,11 @@
         const rpmText = n.kind !== "input" && ((_b = n.results) == null ? void 0 : _b[p.id]) !== void 0 ? `${n.results[p.id]} rpm` : "";
         ctx.textAlign = "center";
         if (pos.edge === "top") {
-          if (p.label) {
+          const shown = portDisplay(n, p);
+          if (shown && p.label) {
             ctx.fillStyle = "#14202b";
             ctx.font = "12px system-ui,sans-serif";
-            ctx.fillText(p.label, pos.x, n.y + 18);
+            ctx.fillText(shown, pos.x, n.y + 18);
           }
           if (rpmText) {
             ctx.fillStyle = "#0b3a4a";
@@ -1068,10 +1119,11 @@
             ctx.font = "11px ui-monospace,monospace";
             ctx.fillText(rpmText, pos.x, n.y + hh - 28);
           }
-          if (p.label) {
+          const shown = portDisplay(n, p);
+          if (shown && p.label) {
             ctx.fillStyle = "#14202b";
             ctx.font = "12px system-ui,sans-serif";
-            ctx.fillText(p.label, pos.x, n.y + hh - 12);
+            ctx.fillText(shown, pos.x, n.y + hh - 12);
           }
         }
         ctx.beginPath();
@@ -1254,7 +1306,8 @@
         id: `${armed.kind}_${seq++}`,
         kind: armed.kind,
         label: "",
-        tableOn: false,
+        portLabels: {},
+        tablePorts: {},
         x: p.x - nodeW({ kind: armed.kind }) / 2,
         y: p.y - 20
       };
@@ -1339,9 +1392,9 @@
     const sunX = xlX + 2 * nodeW(xl) / 3;
     const inY = xlY + nodeH(xl) + 36;
     nodes = [
-      { id: "xl1", kind: "xl", x: xlX, y: xlY, label: "", tableOn: false },
-      { id: "in_ring", kind: "input", x: ringX - nodeW(input) / 2, y: inY, label: "", tableOn: false, shape: "zeros", series: fillSeries("zeros", scenarioCount), rpm: 0 },
-      { id: "in_sun", kind: "input", x: sunX - nodeW(input) / 2, y: inY, label: "", tableOn: false, shape: "ones", series: fillSeries("ones", scenarioCount), rpm: 1 }
+      { id: "xl1", kind: "xl", x: xlX, y: xlY, label: "", portLabels: {}, tablePorts: {} },
+      { id: "in_ring", kind: "input", x: ringX - nodeW(input) / 2, y: inY, label: "", portLabels: {}, tablePorts: {}, shape: "zeros", series: fillSeries("zeros", scenarioCount), rpm: 0 },
+      { id: "in_sun", kind: "input", x: sunX - nodeW(input) / 2, y: inY, label: "", portLabels: {}, tablePorts: {}, shape: "ones", series: fillSeries("ones", scenarioCount), rpm: 1 }
     ];
     wires = [
       { id: "e1", from: "in_sun", fromPort: "io", to: "xl1", toPort: "sun" },
@@ -1392,8 +1445,8 @@
     const node = nodes.find((n) => n.id === nodeId);
     if (!node) return portId;
     const port = BLOCK_PORTS[node.kind].find((p) => p.id === portId);
-    const block = node.kind === "input" ? "Input" : node.kind === "oneWay" ? "1WM" : node.kind === "inverter" ? "Inverter" : node.kind.toUpperCase();
-    return port && port.label ? `${block} ${port.label}` : block;
+    const block = blockTitle(node);
+    return port && port.label ? `${block} ${portDisplay(node, port)}` : block;
   }
   function rangeText(name, rpm0, slope, lo, hi) {
     const toRpm = (t) => rpm0 + slope * t;
@@ -1502,18 +1555,20 @@
   }
   function tableColumns() {
     const ordered = [
-      ...nodes.filter((n) => n.kind === "input" && n.tableOn),
-      ...nodes.filter((n) => n.kind !== "input" && n.tableOn)
+      ...nodes.filter((n) => n.kind === "input"),
+      ...nodes.filter((n) => n.kind !== "input")
     ];
     const cols = [];
     for (const n of ordered) {
       const ports = BLOCK_PORTS[n.kind];
       for (const p of ports) {
+        if (!n.tablePorts || !n.tablePorts[p.id]) continue;
+        const name = portDisplay(n, p);
         cols.push({
           key: `${n.id}:${p.id}`,
           input: n.kind === "input",
           node: n,
-          head: ports.length === 1 ? blockTitle(n) : `${blockTitle(n)} ${p.label || p.id}`
+          head: ports.length === 1 ? blockTitle(n) : `${blockTitle(n)} ${name}`
         });
       }
     }
@@ -1530,17 +1585,30 @@
       ...nodes.filter((n) => n.kind !== "input")
     ];
     for (const n of orderedNodes) {
-      const label = document.createElement("label");
-      const box = document.createElement("input");
-      box.type = "checkbox";
-      box.checked = !!n.tableOn;
-      box.addEventListener("change", () => {
-        n.tableOn = box.checked;
-        renderTruth();
-      });
-      label.appendChild(box);
-      label.appendChild(document.createTextNode(blockTitle(n)));
-      checks.appendChild(label);
+      const ports = BLOCK_PORTS[n.kind];
+      const group = document.createElement("span");
+      group.className = "checkGroup";
+      if (ports.length > 1) {
+        const name = document.createElement("span");
+        name.className = "gname";
+        name.textContent = blockTitle(n);
+        group.appendChild(name);
+      }
+      for (const p of ports) {
+        const label = document.createElement("label");
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = !!(n.tablePorts && n.tablePorts[p.id]);
+        box.addEventListener("change", () => {
+          if (!n.tablePorts) n.tablePorts = {};
+          n.tablePorts[p.id] = box.checked;
+          renderTruth();
+        });
+        label.appendChild(box);
+        label.appendChild(document.createTextNode(ports.length === 1 ? blockTitle(n) : portDisplay(n, p)));
+        group.appendChild(label);
+      }
+      checks.appendChild(group);
     }
     const cols = tableColumns();
     table.innerHTML = "";
@@ -1556,7 +1624,7 @@
     }
     if (!cols.length) {
       const th = document.createElement("th");
-      th.textContent = "Tick blocks above to add columns";
+      th.textContent = "Tick a port above to add a column";
       hr.appendChild(th);
     }
     thead.appendChild(hr);
@@ -1647,7 +1715,7 @@
       renderTruth();
     }
     if (bad) setStatus(`Ran ${scenarioCount} scenarios. ${bad} ${bad === 1 ? "has" : "have"} no solution.`, true);
-    else setStatus(`Ran ${scenarioCount} scenarios. Tick blocks to add table columns.`);
+    else setStatus(`Ran ${scenarioCount} scenarios. Tick a port to add a column.`);
   }
   document.getElementById("btnXl").onclick = loadXl;
   document.getElementById("btnClear").onclick = clearAll;
