@@ -60,7 +60,7 @@
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;opacity:.6;margin-bottom:8px;">Blocks</div>
       <div id="palette"></div>
       <label>Input rpm<input id="driveRpm" type="number" value="1" step="any"/></label>
-      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: orange port → left port.<br/>Select an Input on the canvas to change its rpm.<br/>Move: drag a placed block.<br/>Delete: select a block, then Delete or Backspace.</p>
+      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: orange port → left port.<br/>Select an Input on the canvas to change its rpm.<br/>Move: drag a placed block.<br/>Delete: select a block, then Delete or Backspace.<br/>Run: Enter.</p>
     </aside>
     <div id="stage"><canvas id="c"></canvas></div>
   </main>
@@ -1065,6 +1065,11 @@
     draw();
   }
   window.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      run();
+      return;
+    }
     if (e.key !== "Delete" && e.key !== "Backspace") return;
     const target = e.target;
     if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
