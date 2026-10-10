@@ -442,36 +442,50 @@
       ]
     };
   }
-  function buildIPGS(prefix = "ipgs", knownRpm = {}) {
-    // No IPGS equation. The PGS adds the outside speeds: ω_c = ω_r + ω_s.
-    // The inverter only flips that carrier.
-    const pgs = buildPGS(`${prefix}:pgs`, {
-      sun: knownRpm.sun,
-      ring: knownRpm.ring
-    });
-    const carrier = `${prefix}:carrier`;
-    const carrierShaft = knownRpm.carrier !== void 0 ? sh(carrier, "Carrier", { omegaKnown: rpmToRad(knownRpm.carrier) }) : sh(carrier, "Carrier", { tauExtKnown: 0 });
-    const inverter = {
-      id: `${prefix}:inverter`,
-      shaftA: carrier,
-      shaftB: pgs.ios.carrier,
-      ratio: 1,
-      sign: -1
-    };
+  function flipGear(id, outShaft, inShaft) {
+    return { id, shaftA: outShaft, shaftB: inShaft, ratio: 1, sign: -1 };
+  }
+  function buildInverter(prefix = "inv") {
+    const inn = `${prefix}:in`;
+    const out = `${prefix}:out`;
     return {
       mechanism: {
-        shafts: [...pgs.mechanism.shafts, carrierShaft],
-        gears: [...pgs.mechanism.gears, inverter],
+        shafts: [
+          sh(inn, "In", { tauExtKnown: 0 }),
+          sh(out, "Out", { tauExtKnown: 0 })
+        ],
+        gears: [flipGear(`${prefix}:flip`, out, inn)],
+        oneWays: [],
+        equalities: []
+      },
+      ios: { in: inn, out },
+      displayShafts: [inn, out],
+      notes: ["Inverter: \u03C9_out = \u2212\u03C9_in"]
+    };
+  }
+  function buildIPGS(prefix = "ipgs", knownRpm = {}) {
+    // No IPGS equation. The inverter flips the sun, then the PGS adds.
+    // ω_carrier = ω_ring + (−ω_sun). Sun 1 and ring 1 → carrier 0.
+    const pgs = buildPGS(`${prefix}:pgs`, {
+      ring: knownRpm.ring,
+      carrier: knownRpm.carrier
+    });
+    const sun = `${prefix}:sun`;
+    const sunShaft = knownRpm.sun !== void 0 ? sh(sun, "Sun", { omegaKnown: rpmToRad(knownRpm.sun) }) : sh(sun, "Sun", { tauExtKnown: 0 });
+    return {
+      mechanism: {
+        shafts: [...pgs.mechanism.shafts, sunShaft],
+        gears: [...pgs.mechanism.gears, flipGear(`${prefix}:inverter`, pgs.ios.sun, sun)],
         oneWays: [],
         equalities: pgs.mechanism.equalities
       },
-      ios: { sun: pgs.ios.sun, carrier, ring: pgs.ios.ring },
-      displayShafts: [pgs.ios.sun, carrier, pgs.ios.ring],
+      ios: { sun, carrier: pgs.ios.carrier, ring: pgs.ios.ring },
+      displayShafts: [sun, pgs.ios.carrier, pgs.ios.ring],
       notes: [
-        "IPGS = PGS + inverter. The PGS owns the only mesh equation.",
-        "PGS outside: \u03C9_carrier = \u03C9_ring + \u03C9_sun",
-        "Inverter: flips that carrier",
-        "Sun 1 and ring 0 \u2192 PGS carrier 1 \u2192 IPGS carrier \u22121"
+        "IPGS = sun-path inverter + PGS. No equation of its own.",
+        "Inverter: \u03C9_into_sun = \u2212\u03C9_sun",
+        "PGS: \u03C9_carrier = \u03C9_ring + \u03C9_into_sun",
+        "Sun 1 and ring 1 \u2192 carrier 0"
       ]
     };
   }
@@ -513,7 +527,7 @@
       displayShafts: [ipgs.ios.sun, carrier, ipgs.ios.ring, wheel],
       notes: [
         "XL = IPGS + 1WM on carrier (pawl) \u2194 1WM port (wheel)",
-        "Ring fixed, sun = 1 \u2192 PGS carrier 1, inverter flips the port to \u22121",
+        "Ring fixed, sun = 1 \u2192 inverter makes sun \u22121, PGS carrier = \u22121",
         "1WM port is free (\u03C4=0) until the clutch locks it to the carrier"
       ]
     };
@@ -571,6 +585,10 @@
       { id: "1wm", label: "1WM" }
     ],
     // Single speed IO — no "out" label
+    inverter: [
+      { id: "in", label: "In" },
+      { id: "out", label: "Out" }
+    ],
     input: [{ id: "io", label: "" }]
   };
   function isSourceOnly(kind) {
@@ -584,6 +602,8 @@
         return buildIPGS(prefix, {});
       case "oneWay":
         return build1WM(prefix, {});
+      case "inverter":
+        return buildInverter(prefix);
       case "xl":
         return buildXL(prefix, {});
       case "input": {
@@ -671,6 +691,7 @@
   var PALETTE = [
     { kind: "pgs", title: "PGS" },
     { kind: "ipgs", title: "IPGS" },
+    { kind: "inverter", title: "Inverter" },
     { kind: "oneWay", title: "1WM" },
     { kind: "xl", title: "XL" },
     { kind: "input", title: "Input", rpm: 1 }
@@ -807,6 +828,7 @@
       let title;
       if (n.kind === "input") title = `${(_a = n.rpm) != null ? _a : 0} rpm`;
       else if (n.kind === "oneWay") title = "1WM";
+      else if (n.kind === "inverter") title = "Inverter";
       else title = n.kind.toUpperCase();
       ctx.fillText(title, n.x + 12, n.y + 22);
       for (const p of BLOCK_PORTS[n.kind]) {

@@ -36,7 +36,8 @@ Optional related context (if present in Project docs):
 | Block | Meaning |
 |-------|---------|
 | **PGS** | Planetary, teeth 30/30/90 inside (sun 1:1, ring 1:3, carrier 1:4). Those ratios cancel at the ports, so outside ω_carrier = ω_ring + ω_sun. Ring fixed → carrier = sun. |
-| **IPGS** | A PGS plus a sign-flip inverter on the carrier. No equation of its own. Inverter flips the PGS carrier, so ring fixed and sun 1 → carrier −1. |
+| **Inverter** | Separate block. ω_out = −ω_in. |
+| **IPGS** | Sun-path inverter, then a PGS. No equation of its own. ω_carrier = ω_ring − ω_sun. Sun 1 and ring 1 → carrier 0. Ring fixed and sun 1 → carrier −1. |
 | **1WM** | Ratchet: CW relative engages; ACW slips (complementarity, not 2ⁿ in production) |
 | **XL** | Holistic = IPGS + 1WM (carrier = pawl, 1WM port = wheel) |
 | **Input** | Prescribed rpm source (replace old Drive/Ground) |
