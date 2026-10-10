@@ -33,11 +33,24 @@
   .pal { display: block; width: 100%; height: auto; padding: 10px; margin: 0 0 8px; text-align: left; font-weight: 600; }
   .pal.active { outline: 2px solid var(--signal); background: color-mix(in srgb, var(--signal) 18%, var(--paper)); }
   main { flex: 1; min-height: 0; display: flex; }
-  aside { width: 160px; padding: 12px; border-right: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); background: color-mix(in srgb, var(--paper) 70%, transparent); }
+  aside { width: 220px; padding: 12px; border-right: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); background: color-mix(in srgb, var(--paper) 70%, transparent); overflow: auto; }
   #stage { flex: 1; min-width: 0; position: relative; }
   canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
   label { display: block; font-size: 11px; opacity: 0.7; margin-top: 10px; }
   input { width: 100%; margin-top: 4px; height: 28px; border-radius: 6px; border: 1px solid #9aafbf; padding: 0 8px; background: var(--paper); }
+  .shapes { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .shapes button { height: 26px; padding: 0 6px; font-size: 11px; }
+  #seriesBox { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  #seriesBox input { width: 46px; height: 26px; margin: 0; padding: 0 4px; text-align: center; }
+  #truthWrap { max-height: 38vh; overflow: auto; padding: 10px 14px 14px; background: var(--paper); border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); }
+  #truthChecks label { display: inline-flex; align-items: center; gap: 4px; width: auto; margin: 0 12px 8px 0; font-size: 12px; opacity: 1; }
+  #truthChecks input { width: auto; height: auto; margin: 0; }
+  #truth { border-collapse: collapse; font-size: 13px; }
+  #truth th, #truth td { border: 1px solid #9aafbf; padding: 4px 8px; white-space: nowrap; }
+  #truth th { background: #e7eef3; text-align: left; }
+  #truth td { text-align: right; }
+  #truth tbody tr { cursor: pointer; }
+  #truth tr.viewing td { background: color-mix(in srgb, var(--signal) 18%, white); }
   #status { font-size: 14px; }
   .hint { font-size: 11px; opacity: 0.65; line-height: 1.35; margin-top: 8px; }
 </style>
@@ -61,11 +74,28 @@
     <aside>
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;opacity:.6;margin-bottom:8px;">Blocks</div>
       <div id="palette"></div>
-      <label>Input rpm<input id="driveRpm" type="number" value="1" step="any"/></label>
-      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Drag a block to move it. Drag empty canvas to pan. Pinch to zoom.<br/>Select an Input on the canvas to change its rpm.<br/>Run: Enter.<br/>Multiple solutions: Previous and Next, or [ and ].</p>
+      <label>Scenarios<input id="scenarioCount" type="number" min="1" max="64" value="8"></label>
+      <div id="nodePanel" hidden>
+        <label>Label<input id="nodeLabel" type="text" placeholder="Name on the diagram"></label>
+        <div id="inputPanel" hidden>
+          <div class="shapes">
+            <button type="button" data-shape="zeros">All 0</button>
+            <button type="button" data-shape="ones">All 1</button>
+            <button type="button" data-shape="count0">010101</button>
+            <button type="button" data-shape="count1">00110011</button>
+            <button type="button" data-shape="count2">00001111</button>
+          </div>
+          <div id="seriesBox"></div>
+        </div>
+      </div>
+      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick a block to give it a column. Click a row to show it on the diagram.</p>
     </aside>
     <div id="stage"><canvas id="c"></canvas></div>
   </main>
+  <section id="truthWrap" hidden>
+    <div id="truthChecks"></div>
+    <div id="truthScroll"><table id="truth"></table></div>
+  </section>
   <footer><div id="status">Loading…</div></footer>
   <script>
 "use strict";
@@ -797,11 +827,47 @@
   var panY = 0;
   var zoom = 1;
   var seq = 1;
+  var scenarioCount = 8;
+  var scenarioRows = [];
+  var activeScenario = 0;
   var canvas = document.getElementById("c");
   var ctx = canvas.getContext("2d");
   var statusEl = document.getElementById("status");
-  var rpmInput = document.getElementById("driveRpm");
-  var rpmLabel = document.querySelector("label[for='driveRpm'], label:has(#driveRpm)");
+  var countInput = document.getElementById("scenarioCount");
+  var nodePanel = document.getElementById("nodePanel");
+  var nodeLabelInput = document.getElementById("nodeLabel");
+  var inputPanel = document.getElementById("inputPanel");
+  var seriesBox = document.getElementById("seriesBox");
+  function shapeValue(shape, i) {
+    if (shape === "ones") return 1;
+    if (shape === "zeros") return 0;
+    const n = shape === "count0" ? 0 : shape === "count1" ? 1 : 2;
+    const block = 1 << n;
+    return i % (block * 2) < block ? 0 : 1;
+  }
+  function fillSeries(shape, count) {
+    const out = [];
+    for (let i = 0; i < count; i++) out.push(shapeValue(shape, i));
+    return out;
+  }
+  function ensureSeries(n) {
+    if (n.kind !== "input") return;
+    if (!n.shape) n.shape = "zeros";
+    if (n.shape === "custom") {
+      const next = (n.series || []).slice(0, scenarioCount);
+      while (next.length < scenarioCount) next.push(0);
+      n.series = next;
+      return;
+    }
+    n.series = fillSeries(n.shape, scenarioCount);
+  }
+  function blockTitle(n) {
+    if (n.label) return n.label;
+    if (n.kind === "input") return "Input";
+    if (n.kind === "oneWay") return "1WM";
+    if (n.kind === "inverter") return "Inverter";
+    return n.kind.toUpperCase();
+  }
   function resize() {
     const wrap = canvas.parentElement;
     canvas.width = wrap.clientWidth * devicePixelRatio;
@@ -858,14 +924,31 @@
     statusEl.style.fontWeight = bad ? "700" : "";
   }
   function syncRpmPanel() {
-    var _a, _b;
     const selected = nodes.find((n) => n.id === selectedId);
-    if ((selected == null ? void 0 : selected.kind) === "input") {
-      rpmInput.value = String((_a = selected.rpm) != null ? _a : 0);
-    } else if ((armed == null ? void 0 : armed.kind) === "input") {
-      rpmInput.value = String((_b = armed.rpm) != null ? _b : Number(rpmInput.value) || 0);
-    }
-    void rpmLabel;
+    nodePanel.hidden = !selected;
+    inputPanel.hidden = !selected || selected.kind !== "input";
+    if (!selected) return;
+    if (document.activeElement !== nodeLabelInput) nodeLabelInput.value = selected.label || "";
+    if (selected.kind !== "input") return;
+    ensureSeries(selected);
+    seriesBox.innerHTML = "";
+    selected.series.forEach((value, i) => {
+      const field = document.createElement("input");
+      field.type = "number";
+      field.step = "any";
+      field.value = String(value);
+      field.title = `Scenario ${i + 1}`;
+      field.addEventListener("input", () => {
+        const v = Number(field.value);
+        if (!Number.isFinite(v)) return;
+        selected.shape = "custom";
+        selected.series[i] = v;
+        selected.rpm = selected.series[0];
+        scenarioRows = [];
+        document.getElementById("truthWrap").hidden = true;
+      });
+      seriesBox.appendChild(field);
+    });
   }
   function screenToWorld(p) {
     return { x: (p.x - panX) / zoom, y: (p.y - panY) / zoom };
@@ -958,7 +1041,8 @@
       ctx.fillStyle = "#0b3a4a";
       ctx.font = "600 14px system-ui,sans-serif";
       let title;
-      if (n.kind === "input") title = `${(_a = n.rpm) != null ? _a : 0} rpm`;
+      if (n.label) title = n.label;
+      else if (n.kind === "input") title = "Input";
       else if (n.kind === "oneWay") title = "1WM";
       else if (n.kind === "inverter") title = "Inverter";
       else title = n.kind.toUpperCase();
@@ -1159,29 +1243,31 @@
       selectedWireId = null;
       selectedCorner = null;
       drag = { id: n.id, ox: p.x - n.x, oy: p.y - n.y };
-      if (n.kind === "input") {
-        setStatus(`Input selected \u2014 set rpm in the sidebar (currently ${(_a = n.rpm) != null ? _a : 0}).`);
-      }
+      if (n.kind === "input") setStatus("Input selected. Name it, then choose a pattern.");
+      else setStatus(`${blockTitle(n)} selected. Name it in the sidebar.`);
       syncRpmPanel();
       draw();
       return;
     }
     if (armed) {
-      const rpm = armed.kind === "input" ? Number(rpmInput.value) : armed.rpm;
-      const safeRpm = Number.isFinite(rpm) ? rpm : 0;
-      nodes.push({
+      const made = {
         id: `${armed.kind}_${seq++}`,
         kind: armed.kind,
+        label: "",
+        tableOn: false,
         x: p.x - nodeW({ kind: armed.kind }) / 2,
-        y: p.y - 20,
-        ...armed.kind === "input" ? { rpm: safeRpm } : {}
-      });
-      selectedId = nodes[nodes.length - 1].id;
+        y: p.y - 20
+      };
+      if (armed.kind === "input") {
+        made.shape = "zeros";
+        made.series = fillSeries("zeros", scenarioCount);
+        made.rpm = 0;
+      }
+      nodes.push(made);
+      selectedId = made.id;
       selectedWireId = null;
       selectedCorner = null;
-      setStatus(
-        armed.kind === "input" ? `Placed Input at ${safeRpm} rpm \u2014 change rpm in the sidebar anytime.` : `Placed ${armed.kind}. Click any port, then any other port.`
-      );
+      setStatus(armed.kind === "input" ? "Placed Input. Choose All 0, All 1, or a count pattern." : `Placed ${armed.kind}. Click any port, then any other port.`);
       syncRpmPanel();
       draw();
       return;
@@ -1189,6 +1275,7 @@
     selectedId = null;
     selectedWireId = null;
     selectedCorner = null;
+    syncRpmPanel();
     const screen = screenXY(e);
     panDrag = { sx: screen.x, sy: screen.y, panX, panY };
     updateCursor();
@@ -1217,28 +1304,6 @@
     panDrag = null;
     updateCursor();
   });
-  rpmInput.addEventListener("change", () => {
-    const v = Number(rpmInput.value);
-    if (!Number.isFinite(v)) return;
-    if ((armed == null ? void 0 : armed.kind) === "input") armed.rpm = v;
-    const selected = nodes.find((n) => n.id === selectedId && n.kind === "input");
-    if (selected) {
-      selected.rpm = v;
-      selected.results = void 0;
-      setStatus(`Input set to ${v} rpm.`);
-      draw();
-    }
-  });
-  rpmInput.addEventListener("input", () => {
-    const v = Number(rpmInput.value);
-    if (!Number.isFinite(v)) return;
-    if ((armed == null ? void 0 : armed.kind) === "input") armed.rpm = v;
-    const selected = nodes.find((n) => n.id === selectedId && n.kind === "input");
-    if (selected) {
-      selected.rpm = v;
-      draw();
-    }
-  });
   function renderPalette() {
     const el = document.getElementById("palette");
     el.innerHTML = "";
@@ -1252,10 +1317,7 @@
           armed = null;
           setStatus("Place mode off.");
         } else {
-          armed = {
-            kind: item.kind,
-            rpm: item.kind === "input" ? Number(rpmInput.value) || item.rpm || 0 : item.rpm
-          };
+          armed = { kind: item.kind };
           selectedId = null;
           selectedWireId = null;
           wireFrom = null;
@@ -1277,9 +1339,9 @@
     const sunX = xlX + 2 * nodeW(xl) / 3;
     const inY = xlY + nodeH(xl) + 36;
     nodes = [
-      { id: "xl1", kind: "xl", x: xlX, y: xlY },
-      { id: "in_ring", kind: "input", x: ringX - nodeW(input) / 2, y: inY, rpm: 0 },
-      { id: "in_sun", kind: "input", x: sunX - nodeW(input) / 2, y: inY, rpm: 1 }
+      { id: "xl1", kind: "xl", x: xlX, y: xlY, label: "", tableOn: false },
+      { id: "in_ring", kind: "input", x: ringX - nodeW(input) / 2, y: inY, label: "", tableOn: false, shape: "zeros", series: fillSeries("zeros", scenarioCount), rpm: 0 },
+      { id: "in_sun", kind: "input", x: sunX - nodeW(input) / 2, y: inY, label: "", tableOn: false, shape: "ones", series: fillSeries("ones", scenarioCount), rpm: 1 }
     ];
     wires = [
       { id: "e1", from: "in_sun", fromPort: "io", to: "xl1", toPort: "sun" },
@@ -1290,6 +1352,8 @@
     selectedWireId = null;
     setStatus("XL demo loaded \u2014 click Run (ring 0, sun 1 \u2192 carrier \u22121, 1WM slips).");
     solutionSets = [];
+    scenarioRows = [];
+    document.getElementById("truthWrap").hidden = true;
     hideSolutionButtons(false);
     renderPalette();
     syncRpmPanel();
@@ -1304,6 +1368,8 @@
     wireFrom = null;
     setStatus("Cleared. Click a block, then click the canvas.");
     solutionSets = [];
+    scenarioRows = [];
+    document.getElementById("truthWrap").hidden = true;
     hideSolutionButtons(false);
     renderPalette();
     syncRpmPanel();
@@ -1371,59 +1437,17 @@
     if (!bits.length) return "";
     return `${bits.join("; ")}. Shown is the smallest-magnitude set.`;
   }
-  function applySolution(index) {
-    if (!solutionSets.length) return;
-    solutionIndex = (index + solutionSets.length) % solutionSets.length;
-    const set = solutionSets[solutionIndex];
+  function speedsOf(set, portShaft) {
+    const speeds = {};
     for (const n of nodes) {
-      if (n.kind === "input") {
-        n.results = void 0;
-        continue;
-      }
-      n.results = {};
       for (const p of BLOCK_PORTS[n.kind]) {
-        const sid = solutionPorts[`${n.id}:${p.id}`];
-        if (sid !== void 0 && set.omega[sid] !== void 0) n.results[p.id] = fmtRpm(radToRpm(set.omega[sid]));
+        const sid = portShaft[`${n.id}:${p.id}`];
+        if (sid !== void 0 && set.omega[sid] !== void 0) speeds[`${n.id}:${p.id}`] = fmtRpm(radToRpm(set.omega[sid]));
       }
     }
-    const count = solutionSets.length;
-    const ow = set.oneWays.map((o) => o.engagement).join(", ");
-    const head = count > 1 ? `Solution ${solutionIndex + 1} of ${count}. ` : "Solved. ";
-    const clutch = ow ? `1WM: ${ow}. ` : "";
-    const extra = freedomText(set);
-    setStatus(`${head}${clutch}${extra}`.trim());
-    hideSolutionButtons(count > 1);
-    draw();
+    return speeds;
   }
-  function run() {
-    const specs = nodes.map((n) => ({
-      id: n.id,
-      kind: n.kind,
-      rpm: n.rpm
-    }));
-    const edgeSpecs = wires.map((w) => ({
-      id: w.id,
-      source: w.from,
-      sourceHandle: w.fromPort,
-      target: w.to,
-      targetHandle: w.toPort
-    }));
-    const compose = composeGraph(specs, edgeSpecs);
-    if (!compose.ok) {
-      solutionSets = [];
-      hideSolutionButtons(false);
-      setStatus(compose.error);
-      return;
-    }
-    const sets = solveAll(compose.mechanism);
-    if (!sets.length) {
-      solutionSets = [];
-      hideSolutionButtons(false);
-      for (const n of nodes) n.results = void 0;
-      setStatus("No solution. Connected parts are being driven at different speeds.", true);
-      draw();
-      return;
-    }
+  function annotateSets(sets, compose) {
     for (const set of sets) {
       const dirs = set.nullOmegas || [];
       if (dirs.length > 1) {
@@ -1447,9 +1471,183 @@
         set.freedom = { kind: "line", dir, lo, hi };
       }
     }
-    solutionSets = sets;
-    solutionPorts = compose.portShaft;
-    applySolution(0);
+    return sets;
+  }
+  function solveScenario(index) {
+    for (const n of nodes) ensureSeries(n);
+    const specs = nodes.map((n) => ({
+      id: n.id,
+      kind: n.kind,
+      rpm: n.kind === "input" ? n.series[index] : n.rpm
+    }));
+    const edgeSpecs = wires.map((w) => ({
+      id: w.id,
+      source: w.from,
+      sourceHandle: w.fromPort,
+      target: w.to,
+      targetHandle: w.toPort
+    }));
+    const compose = composeGraph(specs, edgeSpecs);
+    if (!compose.ok) return { ok: false, error: compose.error, speeds: {}, multiple: false };
+    const sets = annotateSets(solveAll(compose.mechanism), compose);
+    if (!sets.length) return { ok: false, error: "No solution", speeds: {}, multiple: false };
+    return {
+      ok: true,
+      sets,
+      portShaft: compose.portShaft,
+      solutionIndex: 0,
+      multiple: sets.length > 1,
+      speeds: speedsOf(sets[0], compose.portShaft)
+    };
+  }
+  function tableColumns() {
+    const ordered = [
+      ...nodes.filter((n) => n.kind === "input" && n.tableOn),
+      ...nodes.filter((n) => n.kind !== "input" && n.tableOn)
+    ];
+    const cols = [];
+    for (const n of ordered) {
+      const ports = BLOCK_PORTS[n.kind];
+      for (const p of ports) {
+        cols.push({
+          key: `${n.id}:${p.id}`,
+          input: n.kind === "input",
+          node: n,
+          head: ports.length === 1 ? blockTitle(n) : `${blockTitle(n)} ${p.label || p.id}`
+        });
+      }
+    }
+    return cols;
+  }
+  function renderTruth() {
+    const wrap = document.getElementById("truthWrap");
+    const checks = document.getElementById("truthChecks");
+    const table = document.getElementById("truth");
+    wrap.hidden = scenarioRows.length === 0;
+    checks.innerHTML = "";
+    const orderedNodes = [
+      ...nodes.filter((n) => n.kind === "input"),
+      ...nodes.filter((n) => n.kind !== "input")
+    ];
+    for (const n of orderedNodes) {
+      const label = document.createElement("label");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = !!n.tableOn;
+      box.addEventListener("change", () => {
+        n.tableOn = box.checked;
+        renderTruth();
+      });
+      label.appendChild(box);
+      label.appendChild(document.createTextNode(blockTitle(n)));
+      checks.appendChild(label);
+    }
+    const cols = tableColumns();
+    table.innerHTML = "";
+    const thead = document.createElement("thead");
+    const hr = document.createElement("tr");
+    const corner = document.createElement("th");
+    corner.textContent = "Scenario";
+    hr.appendChild(corner);
+    for (const col of cols) {
+      const th = document.createElement("th");
+      th.textContent = col.head;
+      hr.appendChild(th);
+    }
+    if (!cols.length) {
+      const th = document.createElement("th");
+      th.textContent = "Tick blocks above to add columns";
+      hr.appendChild(th);
+    }
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    scenarioRows.forEach((row, i) => {
+      const tr = document.createElement("tr");
+      if (i === activeScenario) tr.className = "viewing";
+      tr.addEventListener("click", () => showScenario(i));
+      const th = document.createElement("td");
+      th.textContent = row.multiple ? `${i + 1}*` : String(i + 1);
+      if (!row.ok) th.textContent = `${i + 1} none`;
+      tr.appendChild(th);
+      if (!cols.length) {
+        const td = document.createElement("td");
+        td.textContent = "";
+        tr.appendChild(td);
+      }
+      for (const col of cols) {
+        const td = document.createElement("td");
+        if (col.input) td.textContent = fmtRpm(col.node.series[i] ?? 0);
+        else if (!row.ok) td.textContent = "—";
+        else td.textContent = row.speeds[col.key] ?? "";
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+  }
+  function showScenario(index) {
+    activeScenario = index;
+    const row = scenarioRows[index];
+    if (!row || !row.ok) {
+      solutionSets = [];
+      hideSolutionButtons(false);
+      for (const n of nodes) n.results = void 0;
+      setStatus(`Scenario ${index + 1}: no solution. Connected parts are being driven at different speeds.`, true);
+      draw();
+      renderTruth();
+      return;
+    }
+    solutionSets = row.sets;
+    solutionPorts = row.portShaft;
+    applySolution(row.solutionIndex || 0);
+  }
+  function applySolution(index) {
+    if (!solutionSets.length) return;
+    solutionIndex = (index + solutionSets.length) % solutionSets.length;
+    const set = solutionSets[solutionIndex];
+    if (scenarioRows[activeScenario]) {
+      scenarioRows[activeScenario].solutionIndex = solutionIndex;
+      scenarioRows[activeScenario].speeds = speedsOf(set, solutionPorts);
+    }
+    for (const n of nodes) {
+      if (n.kind === "input") {
+        n.results = void 0;
+        continue;
+      }
+      n.results = {};
+      for (const p of BLOCK_PORTS[n.kind]) {
+        const sid = solutionPorts[`${n.id}:${p.id}`];
+        if (sid !== void 0 && set.omega[sid] !== void 0) n.results[p.id] = fmtRpm(radToRpm(set.omega[sid]));
+      }
+    }
+    const count = solutionSets.length;
+    const ow = set.oneWays.map((o) => o.engagement).join(", ");
+    const head = `Scenario ${activeScenario + 1}. ` + (count > 1 ? `Solution ${solutionIndex + 1} of ${count}. ` : "");
+    const clutch = ow ? `1WM: ${ow}. ` : "";
+    const extra = freedomText(set);
+    setStatus(`${head}${clutch}${extra}`.trim());
+    hideSolutionButtons(count > 1);
+    draw();
+    if (scenarioRows.length) renderTruth();
+  }
+  function run() {
+    for (const n of nodes) ensureSeries(n);
+    scenarioRows = [];
+    for (let i = 0; i < scenarioCount; i++) scenarioRows.push(solveScenario(i));
+    const bad = scenarioRows.filter((row) => !row.ok).length;
+    document.getElementById("truthWrap").hidden = false;
+    if (scenarioRows[0] && scenarioRows[0].ok) showScenario(0);
+    else {
+      activeScenario = 0;
+      solutionSets = [];
+      hideSolutionButtons(false);
+      for (const n of nodes) n.results = void 0;
+      draw();
+      renderTruth();
+    }
+    if (bad) setStatus(`Ran ${scenarioCount} scenarios. ${bad} ${bad === 1 ? "has" : "have"} no solution.`, true);
+    else setStatus(`Ran ${scenarioCount} scenarios. Tick blocks to add table columns.`);
   }
   document.getElementById("btnXl").onclick = loadXl;
   document.getElementById("btnClear").onclick = clearAll;
@@ -1464,8 +1662,37 @@
     wireFrom = null;
     setStatus("Place mode off.");
     renderPalette();
+    syncRpmPanel();
     draw();
   };
+  countInput.addEventListener("change", () => {
+    const v = Math.round(Number(countInput.value));
+    scenarioCount = Math.min(64, Math.max(1, Number.isFinite(v) ? v : 1));
+    countInput.value = String(scenarioCount);
+    for (const n of nodes) ensureSeries(n);
+    scenarioRows = [];
+    document.getElementById("truthWrap").hidden = true;
+    syncRpmPanel();
+  });
+  nodeLabelInput.addEventListener("input", () => {
+    const n = nodes.find((node) => node.id === selectedId);
+    if (!n) return;
+    n.label = nodeLabelInput.value;
+    draw();
+    if (scenarioRows.length) renderTruth();
+  });
+  document.querySelector(".shapes").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-shape]");
+    if (!btn) return;
+    const n = nodes.find((node) => node.id === selectedId && node.kind === "input");
+    if (!n) return;
+    n.shape = btn.dataset.shape;
+    n.series = fillSeries(n.shape, scenarioCount);
+    n.rpm = n.series[0] || 0;
+    scenarioRows = [];
+    document.getElementById("truthWrap").hidden = true;
+    syncRpmPanel();
+  });
   function deleteSelected() {
     if (selectedCorner) {
       const w = wires.find((x) => x.id === selectedCorner.id);
