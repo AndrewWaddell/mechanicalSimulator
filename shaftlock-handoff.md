@@ -35,13 +35,13 @@ Optional related context (if present in Project docs):
 
 | Block | Meaning |
 |-------|---------|
-| **PGS** | Planetary: sun 30T, planet 30T, ring 90T (Willis) |
-| **IPGS** | A PGS plus a sign-flip inverter on the carrier. No equation of its own. PGS: 1·ω_sun + 3·ω_ring = 4·ω_inside. Inverter: ω_carrier = −ω_inside. Sun 1 and ring 1 → carrier −1. Ring fixed, sun 1 → carrier −0.25. |
+| **PGS** | Planetary, teeth 30/30/90 inside (sun 1:1, ring 1:3, carrier 1:4). Those ratios cancel at the ports, so outside ω_carrier = ω_ring + ω_sun. Ring fixed → carrier = sun. |
+| **IPGS** | A PGS plus a sign-flip inverter on the carrier. No equation of its own. Inverter flips the PGS carrier, so ring fixed and sun 1 → carrier −1. |
 | **1WM** | Ratchet: CW relative engages; ACW slips (complementarity, not 2ⁿ in production) |
 | **XL** | Holistic = IPGS + 1WM (carrier = pawl, 1WM port = wheel) |
 | **Input** | Prescribed rpm source (replace old Drive/Ground) |
 
-**XL demo:** ring input = 0 rpm, sun input = 1 rpm → carrier = −0.25 rpm (PGS gives +0.25, inverter flips it).  
+**XL demo:** ring input = 0 rpm, sun input = 1 rpm → carrier = −1 rpm (PGS gives +1, inverter flips it), 1WM slips.  
 **Modeling:** far/free shafts τ=0; after slip, min-norm pins idle ω→0.
 
 **UI today (intended):**

@@ -408,30 +408,43 @@
     const sun = `${prefix}:sun`;
     const carrier = `${prefix}:carrier`;
     const ring = `${prefix}:ring`;
+    const ringGear = `${prefix}:ringGear`;
+    const carrierGear = `${prefix}:carrierGear`;
     const mk = (id, label, key) => {
       const rpm = knownRpm[key];
       if (rpm !== void 0) return sh(id, label, { omegaKnown: rpmToRad(rpm) });
       return sh(id, label, { tauExtKnown: 0 });
     };
+    // Teeth 30/30/90 stay inside the mesh: sun 1:1, ring 1:3, carrier 1:4.
+    // Those ratios cancel at the ports, so the outside speeds are ω_c = ω_r + ω_s.
     return {
       mechanism: {
-        shafts: [mk(sun, "Sun", "sun"), mk(carrier, "Carrier", "carrier"), mk(ring, "Ring", "ring")],
-        gears: [],
+        shafts: [
+          mk(sun, "Sun", "sun"),
+          mk(carrier, "Carrier", "carrier"),
+          mk(ring, "Ring", "ring"),
+          sh(ringGear, "Ring gear", { tauExtKnown: 0 }),
+          sh(carrierGear, "Carrier gear", { tauExtKnown: 0 })
+        ],
+        gears: [
+          { id: `${prefix}:ringRatio`, shaftA: ring, shaftB: ringGear, ratio: 3, sign: 1 },
+          { id: `${prefix}:carrierRatio`, shaftA: carrier, shaftB: carrierGear, ratio: 4, sign: 1 }
+        ],
         oneWays: [],
-        equalities: [willisEquality(prefix, sun, carrier, ring)]
+        equalities: [willisEquality(prefix, sun, carrierGear, ringGear)]
       },
       ios: { sun, carrier, ring },
       displayShafts: [sun, carrier, ring],
       notes: [
-        "PGS 30T/30T/90T \u2014 Willis (\u03C9_s\u2212\u03C9_c)/(\u03C9_r\u2212\u03C9_c)=\u22123",
-        "Ring fixed \u2192 carrier = sun/4; carrier fixed \u2192 ring = \u2212sun/3"
+        "Inside: 30/30/90, sun 1:1, ring 1:3, carrier 1:4",
+        "Outside ports: \u03C9_carrier = \u03C9_ring + \u03C9_sun",
+        "Ring fixed \u2192 carrier = sun; carrier fixed \u2192 ring = \u2212sun"
       ]
     };
   }
   function buildIPGS(prefix = "ipgs", knownRpm = {}) {
-    // No IPGS equation. Sun and ring pass straight into a PGS.
-    // The PGS adds them: 1·ω_sun + 3·ω_ring = 4·ω_inside.
-    // The inverter only flips that carrier: ω_port = −ω_inside.
+    // No IPGS equation. The PGS adds the outside speeds: ω_c = ω_r + ω_s.
+    // The inverter only flips that carrier.
     const pgs = buildPGS(`${prefix}:pgs`, {
       sun: knownRpm.sun,
       ring: knownRpm.ring
@@ -455,10 +468,10 @@
       ios: { sun: pgs.ios.sun, carrier, ring: pgs.ios.ring },
       displayShafts: [pgs.ios.sun, carrier, pgs.ios.ring],
       notes: [
-        "IPGS = PGS + inverter. The PGS owns the only equation.",
-        "PGS: 1\u00B7\u03C9_sun + 3\u00B7\u03C9_ring = 4\u00B7\u03C9_inside",
-        "Inverter: \u03C9_carrier = \u2212\u03C9_inside",
-        "Sun 1 and ring 1 \u2192 inside carrier 1 \u2192 port carrier \u22121"
+        "IPGS = PGS + inverter. The PGS owns the only mesh equation.",
+        "PGS outside: \u03C9_carrier = \u03C9_ring + \u03C9_sun",
+        "Inverter: flips that carrier",
+        "Sun 1 and ring 0 \u2192 PGS carrier 1 \u2192 IPGS carrier \u22121"
       ]
     };
   }
@@ -500,7 +513,7 @@
       displayShafts: [ipgs.ios.sun, carrier, ipgs.ios.ring, wheel],
       notes: [
         "XL = IPGS + 1WM on carrier (pawl) \u2194 1WM port (wheel)",
-        "Ring fixed, sun = 1 \u2192 PGS carrier 0.25, inverter flips the port to \u22120.25",
+        "Ring fixed, sun = 1 \u2192 PGS carrier 1, inverter flips the port to \u22121",
         "1WM port is free (\u03C4=0) until the clutch locks it to the carrier"
       ]
     };
@@ -977,7 +990,7 @@
     ];
     armed = null;
     selectedId = null;
-    setStatus("XL demo loaded \u2014 click Run (ring 0, sun 1 \u2192 carrier \u22120.25).");
+    setStatus("XL demo loaded \u2014 click Run (ring 0, sun 1 \u2192 carrier \u22121, 1WM slips).");
     renderPalette();
     syncRpmPanel();
     draw();
