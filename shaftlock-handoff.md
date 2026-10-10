@@ -36,12 +36,12 @@ Optional related context (if present in Project docs):
 | Block | Meaning |
 |-------|---------|
 | **PGS** | Planetary: sun 30T, planet 30T, ring 90T (Willis) |
-| **IPGS** | PGS + sun-path inverter (−4) so ring fixed ⇒ carrier = −sun |
+| **IPGS** | Same external Willis as PGS: 1·ω_sun + 3·ω_ring = 4·ω_carrier. Sun 1:1, ring 1:3, carrier 1:4. Equal sun and ring speeds → carrier at that same speed. Ring fixed → carrier = sun/4. |
 | **1WM** | Ratchet: CW relative engages; ACW slips (complementarity, not 2ⁿ in production) |
-| **XL** | Holistic = IPGS + 1WM (carrier = pawl, far = wheel) |
+| **XL** | Holistic = IPGS + 1WM (carrier = pawl, 1WM port = wheel) |
 | **Input** | Prescribed rpm source (replace old Drive/Ground) |
 
-**XL prove-out:** ring input = 0 rpm, sun input = 1 rpm → carrier ≈ −1 rpm, far ≈ 0, 1WM slips.  
+**XL demo:** ring input = 0 rpm, sun input = 1 rpm → carrier = 0.25 rpm (1:4).  
 **Modeling:** far/free shafts τ=0; after slip, min-norm pins idle ω→0.
 
 **UI today (intended):**

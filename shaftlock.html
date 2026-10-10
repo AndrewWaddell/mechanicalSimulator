@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Shaftlock</title>
-<!-- shaftlock-build: xl-input-ipgs-order-2026-10-10 -->
+<!-- shaftlock-build: ipgs-willis-delete-1wm-2026-10-10 -->
 <style>
   :root {
     --bg: #d9e2ea;
@@ -60,7 +60,7 @@
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;opacity:.6;margin-bottom:8px;">Blocks</div>
       <div id="palette"></div>
       <label>Input rpm<input id="driveRpm" type="number" value="1" step="any"/></label>
-      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: orange port → left port.<br/>Select an Input on the canvas to change its rpm.<br/>Move: drag a placed block.</p>
+      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: orange port → left port.<br/>Select an Input on the canvas to change its rpm.<br/>Move: drag a placed block.<br/>Delete: select a block, then Delete or Backspace.</p>
     </aside>
     <div id="stage"><canvas id="c"></canvas></div>
   </main>
@@ -429,39 +429,31 @@
     };
   }
   function buildIPGS(prefix = "ipgs", knownRpm = {}) {
-    const sunIo = `${prefix}:sun`;
-    const sunInt = `${prefix}:sunInt`;
+    const sun = `${prefix}:sun`;
     const carrier = `${prefix}:carrier`;
     const ring = `${prefix}:ring`;
-    const mkIo = (id, label, key) => {
+    const mk = (id, label, key) => {
       const rpm = knownRpm[key];
       if (rpm !== void 0) return sh(id, label, { omegaKnown: rpmToRad(rpm) });
       return sh(id, label, { tauExtKnown: 0 });
     };
-    const inverter = {
-      id: `${prefix}:inverter`,
-      shaftA: sunIo,
-      shaftB: sunInt,
-      ratio: 0.25,
-      sign: -1
-    };
+    // External ports only. Tooth ratios: sun 1:1, ring 1:3, carrier 1:4.
+    // 1·ω_sun + 3·ω_ring = 4·ω_carrier, so equal sun and ring speeds
+    // put the carrier at that same speed. No sun-path inverter.
     return {
       mechanism: {
-        shafts: [
-          mkIo(sunIo, "Sun (IO)", "sun"),
-          sh(sunInt, "Sun (internal)", { tauExtKnown: 0 }),
-          mkIo(carrier, "Carrier", "carrier"),
-          mkIo(ring, "Ring", "ring")
-        ],
-        gears: [inverter],
+        shafts: [mk(sun, "Sun", "sun"), mk(carrier, "Carrier", "carrier"), mk(ring, "Ring", "ring")],
+        gears: [],
         oneWays: [],
-        equalities: [willisEquality(prefix, sunInt, carrier, ring)]
+        equalities: [willisEquality(prefix, sun, carrier, ring)]
       },
-      ios: { sun: sunIo, carrier, ring },
-      displayShafts: [sunIo, carrier, ring],
+      ios: { sun, carrier, ring },
+      displayShafts: [sun, carrier, ring],
       notes: [
-        "IPGS = PGS + sun-path inverter (\u22124 overall)",
-        "Ring fixed + sun IO = 1 rpm \u2192 carrier = \u22121 rpm (same speed, flipped)"
+        "IPGS external Willis: 1\u00B7\u03C9_sun + 3\u00B7\u03C9_ring = 4\u00B7\u03C9_carrier",
+        "Sun 1:1, ring 1:3, carrier 1:4",
+        "Sun and ring at the same speed \u2192 carrier at that same speed",
+        "Ring fixed \u2192 carrier = sun/4; carrier fixed \u2192 ring = \u2212sun/3"
       ]
     };
   }
@@ -471,18 +463,17 @@
       ring: knownRpm.ring
       // carrier solved
     });
-    const far = `${prefix}:far`;
+    const wheel = `${prefix}:1wmIo`;
     const carrier = ipgs.ios.carrier;
     const oneWay = {
       id: `${prefix}:1wm`,
-      // IPGS carrier = pawl carrier; far IO = ratchet wheel.
-      // When carrier = −1 and far = 0: v = −1 − 0 = −1 (ACW) → slip, λ=0.
+      // IPGS carrier = pawl carrier; 1WM port = ratchet wheel.
       carrierShaft: carrier,
-      wheelShaft: far,
+      wheelShaft: wheel,
       engageSign: 1
     };
-    const farShaft = knownRpm.far !== void 0 ? sh(far, "Far IO (1WM wheel)", { omegaKnown: rpmToRad(knownRpm.far) }) : sh(far, "Far IO (1WM wheel)", { tauExtKnown: 0 });
-    let shafts = [...ipgs.mechanism.shafts, farShaft];
+    const wheelShaft = knownRpm.wm !== void 0 ? sh(wheel, "1WM wheel", { omegaKnown: rpmToRad(knownRpm.wm) }) : sh(wheel, "1WM wheel", { tauExtKnown: 0 });
+    let shafts = [...ipgs.mechanism.shafts, wheelShaft];
     if (knownRpm.carrier !== void 0) {
       shafts = shafts.map(
         (s) => s.id === carrier ? { ...s, omegaKnown: rpmToRad(knownRpm.carrier), tauExtKnown: void 0 } : s
@@ -499,13 +490,13 @@
         sun: ipgs.ios.sun,
         carrier,
         ring: ipgs.ios.ring,
-        far
+        "1wm": wheel
       },
-      displayShafts: [ipgs.ios.sun, carrier, ipgs.ios.ring, far],
+      displayShafts: [ipgs.ios.sun, carrier, ipgs.ios.ring, wheel],
       notes: [
-        "XL = IPGS + 1WM on carrier (pawl) \u2194 far IO (wheel)",
-        "Assumption: far IO is free (\u03C4=0); when 1WM slips, min-norm pins far \u03C9=0",
-        "Prove-out: ring=0, sun=1 \u2192 carrier=\u22121, far=0, 1WM slips"
+        "XL = IPGS + 1WM on carrier (pawl) \u2194 1WM port (wheel)",
+        "Ring fixed, sun = 1 \u2192 carrier = 0.25 (1:4)",
+        "1WM port is free (\u03C4=0) until the clutch locks it to the carrier"
       ]
     };
   }
@@ -559,7 +550,7 @@
       { id: "ring", label: "Ring" },
       { id: "sun", label: "Sun" },
       { id: "carrier", label: "Carrier" },
-      { id: "far", label: "Far" }
+      { id: "1wm", label: "1WM" }
     ],
     // Single speed IO — no "out" label
     input: [{ id: "io", label: "" }]
@@ -981,7 +972,7 @@
     ];
     armed = null;
     selectedId = null;
-    setStatus("XL demo loaded \u2014 click Run (carrier \u22121, far 0, 1WM slips).");
+    setStatus("XL demo loaded \u2014 click Run (ring 0, sun 1 \u2192 carrier 0.25).");
     renderPalette();
     syncRpmPanel();
     draw();
@@ -1044,6 +1035,25 @@
     renderPalette();
     draw();
   };
+  function deleteSelected() {
+    if (!selectedId) return;
+    const id = selectedId;
+    nodes = nodes.filter((n) => n.id !== id);
+    wires = wires.filter((w) => w.from !== id && w.to !== id);
+    if (wireFrom && wireFrom.nodeId === id) wireFrom = null;
+    selectedId = null;
+    setStatus("Removed block.");
+    syncRpmPanel();
+    draw();
+  }
+  window.addEventListener("keydown", (e) => {
+    if (e.key !== "Delete" && e.key !== "Backspace") return;
+    const target = e.target;
+    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+    if (!selectedId) return;
+    e.preventDefault();
+    deleteSelected();
+  });
   window.addEventListener("resize", resize);
   renderPalette();
   loadXl();
