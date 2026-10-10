@@ -35,6 +35,14 @@
   main { flex: 1; min-height: 0; display: flex; }
   .zoomRow { display: flex; gap: 6px; margin-bottom: 12px; }
   .zoomRow button { flex: 1; padding: 0 6px; }
+  aside { width: 220px; flex: none; padding: 12px; border-right: 0; background: color-mix(in srgb, var(--paper) 70%, transparent); overflow: auto; }
+  #btnHideSide { display: block; width: 100%; margin-bottom: 8px; }
+  #splitter { width: 8px; flex: none; cursor: col-resize; background: color-mix(in srgb, var(--ink) 8%, transparent); display: flex; align-items: center; justify-content: center; }
+  #splitter:hover { background: color-mix(in srgb, var(--signal) 28%, transparent); }
+  #showSide { display: none; font-size: 11px; letter-spacing: .04em; }
+  body.sideHidden aside { display: none; }
+  body.sideHidden #splitter { width: 28px; cursor: pointer; }
+  body.sideHidden #showSide { display: block; writing-mode: vertical-rl; }
   #stage { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden; }
   canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
   label { display: block; font-size: 11px; opacity: 0.7; margin-top: 10px; }
@@ -82,7 +90,8 @@
     </div>
   </header>
   <main>
-    <aside>
+    <aside id="side">
+      <button type="button" id="btnHideSide">Hide panel</button>
       <div class="zoomRow">
         <button type="button" id="btnZoomOut">Zoom out</button>
         <button type="button" id="btnZoomIn">Zoom in</button>
@@ -106,6 +115,7 @@
       </div>
       <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.<br/>Save writes a JSON file of this diagram, the scenario lists, and the results. Upload reads one back.</p>
     </aside>
+    <div id="splitter" title="Drag to resize the panel"><span id="showSide">Show panel</span></div>
     <div id="stage"><canvas id="c"></canvas></div>
   </main>
   <section id="truthWrap" hidden>
@@ -840,6 +850,7 @@
   var drag = null;
   var cornerDrag = null;
   var panDrag = null;
+  var splitDrag = null;
   var panX = 0;
   var panY = 0;
   var zoom = 1;
@@ -1382,7 +1393,15 @@
     drag = null;
     cornerDrag = null;
     panDrag = null;
+    splitDrag = null;
     updateCursor();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!splitDrag) return;
+    const max = Math.max(180, window.innerWidth - 240);
+    const next = Math.min(max, Math.max(180, splitDrag.width + (e.clientX - splitDrag.x)));
+    document.getElementById("side").style.width = next + "px";
+    resize();
   });
   function renderPalette() {
     const el = document.getElementById("palette");
@@ -1968,6 +1987,27 @@
   document.getElementById("btnNextSol").onclick = () => applySolution(solutionIndex + 1);
   document.getElementById("btnZoomOut").onclick = () => zoomStep(1 / 1.25);
   document.getElementById("btnZoomIn").onclick = () => zoomStep(1.25);
+  var sideHidden = false;
+  function applySide() {
+    document.body.classList.toggle("sideHidden", sideHidden);
+    resize();
+  }
+  document.getElementById("btnHideSide").onclick = () => {
+    sideHidden = true;
+    splitDrag = null;
+    applySide();
+  };
+  document.getElementById("splitter").addEventListener("mousedown", (e) => {
+    if (sideHidden) return;
+    e.preventDefault();
+    const side = document.getElementById("side");
+    splitDrag = { x: e.clientX, width: side.getBoundingClientRect().width };
+  });
+  document.getElementById("splitter").addEventListener("click", () => {
+    if (!sideHidden) return;
+    sideHidden = false;
+    applySide();
+  });
   document.getElementById("btnUnselect").onclick = () => {
     armed = null;
     selectedId = null;
