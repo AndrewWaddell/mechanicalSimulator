@@ -16,12 +16,11 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; font-family: Figtree, system-ui, sans-serif; color: var(--ink); background: var(--bg); }
   body { display: flex; flex-direction: column; }
-  header, footer {
+  header {
     display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
     padding: 10px 14px; background: color-mix(in srgb, var(--paper) 90%, white);
     border-bottom: 1px solid color-mix(in srgb, var(--ink) 15%, transparent);
   }
-  footer { border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); border-bottom: 0; }
   h1 { margin: 0; font-size: 1.6rem; color: var(--teal); font-family: Fraunces, Georgia, serif; font-weight: 600; }
   .sub { font-size: 12px; opacity: 0.75; margin-top: 2px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -67,8 +66,10 @@
   #truth td { text-align: right; }
   #truth tbody tr { cursor: pointer; }
   #truth tr.viewing td { background: color-mix(in srgb, var(--signal) 18%, white); }
-  #status { font-size: 14px; }
   .hint { font-size: 11px; opacity: 0.65; line-height: 1.35; margin-top: 8px; }
+  #resultsRibbon { display: none; height: 28px; flex: none; align-items: center; justify-content: center; cursor: pointer; background: color-mix(in srgb, var(--ink) 8%, transparent); font-size: 11px; letter-spacing: .04em; }
+  #resultsRibbon:hover { background: color-mix(in srgb, var(--signal) 28%, transparent); }
+  #resultsRibbon.on { display: flex; }
   body.ineq #btnXl,
   body.ineq #btnSave,
   body.ineq #btnUpload,
@@ -110,7 +111,6 @@
       <input id="fileUpload" type="file" accept="application/json,.json" hidden>
       <button type="button" id="btnUnselect">Unselect</button>
       <button type="button" id="btnRun" class="primary">Run</button>
-      <button type="button" id="btnShowTable" hidden>Show table</button>
       <button type="button" id="btnPrevSol" hidden>Previous solution</button>
       <button type="button" id="btnNextSol" hidden>Next solution</button>
     </div>
@@ -148,7 +148,7 @@
         </div>
       </div>
       <p class="hint" id="gearHint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.<br/>Theoretical solves the speeds directly. Mechanical spins the inputs up through springs, inertia, and ratchet friction, and the table adds torque.<br/>Save writes a JSON file of this diagram, the scenario lists, and the results. Upload reads one back.</p>
-      <p class="hint" id="ineqHint">Place a block, then click the canvas. Click a placed block or a wire to name it. Click a selected block again to deselect it.<br/>A wire on an Input or Output keeps that block’s name, and renaming either one updates the other. Run names anything still blank (t1, t2, …), fills empty input scenarios with 0, and opens the table. The Equations tab lists what the wires imply. Hide table puts the results away; Show table brings that same run back.</p>
+      <p class="hint" id="ineqHint">Place a block, then click the canvas. Click a placed block or a wire to name it. Click a selected block again to deselect it.<br/>Wires that meet on the same dot share one name, and a wire on an Input or Output uses that block’s name. The table has one column per name. Run lists an equation for every +, −, ≤, and ≥.</p>
       <div id="ineqPanel">
         <div id="ineqIdle">
           <label>Scenarios
@@ -186,7 +186,7 @@
     <div id="truthChecks"></div>
     <div id="truthScroll"><table id="truth"></table></div>
   </section>
-  <footer><div id="status">Loading…</div></footer>
+  <div id="resultsRibbon">Show table</div>
   <script>
 "use strict";
 (() => {
@@ -966,7 +966,6 @@
   var activeScenario = 0;
   var canvas = document.getElementById("c");
   var ctx = canvas.getContext("2d");
-  var statusEl = document.getElementById("status");
   var countInput = document.getElementById("scenarioCount");
   var nodePanel = document.getElementById("nodePanel");
   var nodeLabelInput = document.getElementById("nodeLabel");
@@ -1089,11 +1088,7 @@
     }
     return null;
   }
-  function setStatus(s, bad) {
-    statusEl.textContent = s;
-    statusEl.style.color = bad ? "#9a3412" : "";
-    statusEl.style.fontWeight = bad ? "700" : "";
-  }
+  function setStatus() {}
   function syncRpmPanel() {
     if (appMode === "inequalities") {
       nodePanel.hidden = true;
@@ -1471,8 +1466,9 @@
           };
           wires.push(madeWire);
           if (appMode === "inequalities") {
-            const namedEnd = endpointBlocks(madeWire).find((n) => ineqTrim(n));
-            if (namedEnd) shareName(namedEnd, namedEnd.label, /* @__PURE__ */ new Set());
+            const group = signalMembers(madeWire);
+            const name = preferredSignalName(group);
+            if (name) unifySignal(group, name);
           }
           setStatus("Wired. Click Run.");
         } else {
@@ -2040,7 +2036,7 @@
     const wasHidden = wrap.hidden;
     const has = scenarioRows.length > 0;
     wrap.hidden = !has || tableClosed;
-    document.getElementById("btnShowTable").hidden = !has || !tableClosed;
+    syncResultsRibbon();
     return wrap.hidden !== wasHidden;
   }
   function renderTruth() {
@@ -2384,29 +2380,77 @@
   function endpointBlocks(wire) {
     return [wire.from, wire.to].map((id) => nodes.find((n) => n.id === id)).filter(isIneqEndpoint);
   }
-  function shareName(node, name, seen) {
-    if (!node || seen.has(node.id)) return;
-    seen.add(node.id);
-    node.label = name;
-    for (const w of wires) {
-      if (w.from !== node.id && w.to !== node.id) continue;
-      w.label = name;
-      for (const other of endpointBlocks(w)) shareName(other, name, seen);
-    }
+  function sharesPort(a, b) {
+    const ports = [`${a.from}\0${a.fromPort}`, `${a.to}\0${a.toPort}`];
+    return ports.includes(`${b.from}\0${b.fromPort}`) || ports.includes(`${b.to}\0${b.toPort}`);
   }
-  function harmonizeEndpointNames() {
-    for (const n of nodes) {
-      if (isIneqEndpoint(n) && ineqTrim(n)) shareName(n, n.label, /* @__PURE__ */ new Set());
-    }
-    for (const w of wires) {
-      if (!ineqTrim(w)) continue;
-      for (const end of endpointBlocks(w)) {
-        if (!ineqTrim(end)) shareName(end, w.label, /* @__PURE__ */ new Set());
+  function signalMembers(start) {
+    const wiresOut = [];
+    const blocksOut = [];
+    const seenW = /* @__PURE__ */ new Set();
+    const seenN = /* @__PURE__ */ new Set();
+    function addWire(w) {
+      if (!w || seenW.has(w.id)) return;
+      seenW.add(w.id);
+      wiresOut.push(w);
+      for (const end of endpointBlocks(w)) addNode(end);
+      for (const other of wires) {
+        if (!seenW.has(other.id) && sharesPort(w, other)) addWire(other);
       }
     }
+    function addNode(n) {
+      if (!isIneqEndpoint(n) || seenN.has(n.id)) return;
+      seenN.add(n.id);
+      blocksOut.push(n);
+      for (const w of wires) {
+        if (w.from === n.id || w.to === n.id) addWire(w);
+      }
+    }
+    if (start && start.kind) addNode(start);
+    else addWire(start);
+    return { wires: wiresOut, blocks: blocksOut };
+  }
+  function preferredSignalName(group) {
+    const namedInput = group.blocks.find((n) => n.kind === "iqInput" && ineqTrim(n));
+    const namedOutput = group.blocks.find((n) => n.kind === "iqOutput" && ineqTrim(n));
+    const namedWire = group.wires.find((w) => ineqTrim(w));
+    const source = namedInput || namedOutput || namedWire;
+    return source ? source.label : "";
+  }
+  function unifySignal(group, name) {
+    for (const block of group.blocks) block.label = name;
+    for (const wire of group.wires) wire.label = name;
+    const inputs = group.blocks.filter((block) => block.kind === "iqInput");
+    if (inputs.length > 1) {
+      ensureIneqValues(inputs[0]);
+      for (const other of inputs.slice(1)) other.values = inputs[0].values.slice();
+    }
+  }
+  function applySignalName(start, name) {
+    unifySignal(signalMembers(start), name);
+  }
+  function signalGroups() {
+    const seenW = /* @__PURE__ */ new Set();
+    const seenN = /* @__PURE__ */ new Set();
+    const groups = [];
+    const take = (seed) => {
+      if (seed.kind && seenN.has(seed.id)) return;
+      if (!seed.kind && seenW.has(seed.id)) return;
+      const group = signalMembers(seed);
+      for (const block of group.blocks) seenN.add(block.id);
+      for (const wire of group.wires) seenW.add(wire.id);
+      groups.push(group);
+    };
+    for (const n of nodes) if (isIneqEndpoint(n)) take(n);
+    for (const w of wires) take(w);
+    return groups;
   }
   function assignTempNames() {
-    harmonizeEndpointNames();
+    const groups = signalGroups();
+    for (const group of groups) {
+      const name = preferredSignalName(group);
+      if (name) unifySignal(group, name);
+    }
     const used = /* @__PURE__ */ new Set();
     for (const n of nodes) {
       const name = ineqTrim(n);
@@ -2426,13 +2470,10 @@
       i += 1;
       return name;
     };
-    for (const n of nodes) {
-      if (!isIneqEndpoint(n) || ineqTrim(n)) continue;
-      shareName(n, take(), /* @__PURE__ */ new Set());
-    }
-    for (const w of wires) {
-      if (ineqTrim(w)) continue;
-      w.label = take();
+    for (const group of groups) {
+      if (preferredSignalName(group)) continue;
+      if (!group.blocks.length && !group.wires.length) continue;
+      unifySignal(group, take());
     }
     return given;
   }
@@ -2446,38 +2487,39 @@
   function wiresOnPort(nodeId, portId) {
     return wires.filter((w) => (w.from === nodeId && w.fromPort === portId) || (w.to === nodeId && w.toPort === portId));
   }
+  function portSignalName(nodeId, portId) {
+    const attached = wiresOnPort(nodeId, portId);
+    if (!attached.length) return "?";
+    return ineqTrim(attached[0]) || "?";
+  }
   function buildIneqEquations() {
     const lines = [];
-    const gaps = [];
     for (const n of nodes) {
-      const symbol = n.kind === "plus" || n.kind === "minus" || n.kind === "leq" || n.kind === "geq";
-      if (!symbol) continue;
-      const ports = n.kind === "plus" || n.kind === "minus" ? ["a", "b", "out"] : ["left", "right"];
-      const names = {};
-      let missing = false;
-      for (const portId of ports) {
-        const attached = wiresOnPort(n.id, portId);
-        if (attached.length !== 1) {
-          missing = true;
-          break;
-        }
-        names[portId] = ineqTrim(attached[0]);
+      if (n.kind === "plus" || n.kind === "minus") {
+        const a = portSignalName(n.id, "a");
+        const b = portSignalName(n.id, "b");
+        const out = portSignalName(n.id, "out");
+        lines.push(n.kind === "plus" ? `${out} = ${a} + ${b}` : `${out} = ${a} \u2212 ${b}`);
+      } else if (n.kind === "leq" || n.kind === "geq") {
+        const left = portSignalName(n.id, "left");
+        const right = portSignalName(n.id, "right");
+        lines.push(n.kind === "leq" ? `${left} \u2264 ${right}` : `${left} \u2265 ${right}`);
       }
-      if (missing) {
-        gaps.push(n.kind === "plus" ? "+" : n.kind === "minus" ? "\u2212" : n.kind === "leq" ? "\u2264" : "\u2265");
-        continue;
-      }
-      if (n.kind === "plus") lines.push(`${names.out} = ${names.a} + ${names.b}`);
-      else if (n.kind === "minus") lines.push(`${names.out} = ${names.a} \u2212 ${names.b}`);
-      else if (n.kind === "leq") lines.push(`${names.left} \u2264 ${names.right}`);
-      else lines.push(`${names.left} \u2265 ${names.right}`);
     }
-    return { lines, gaps };
+    return lines;
+  }
+  function syncResultsRibbon() {
+    const ribbon = document.getElementById("resultsRibbon");
+    if (appMode === "inequalities") {
+      const wrap = document.getElementById("ineqWrap");
+      ribbon.classList.toggle("on", !!ineqResult && wrap.hidden);
+      return;
+    }
+    ribbon.classList.toggle("on", scenarioRows.length > 0 && tableClosed);
   }
   function syncIneqChrome() {
     if (appMode !== "inequalities") return;
-    const wrap = document.getElementById("ineqWrap");
-    document.getElementById("btnShowTable").hidden = !ineqResult || !wrap.hidden;
+    syncResultsRibbon();
   }
   function showIneqTab(tab) {
     ineqTab = tab === "equations" ? "equations" : "table";
@@ -2586,28 +2628,37 @@
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
-    equations.textContent = ineqResult.equations;
+    equations.textContent = "";
+    const equationLines = ineqResult.equations.length ? ineqResult.equations : ["No +, \u2212, \u2264, or \u2265 blocks yet."];
+    for (const line of equationLines) {
+      const row = document.createElement("div");
+      row.textContent = line;
+      equations.appendChild(row);
+    }
     showIneqTab(ineqTab);
     if (wasHidden) resize();
   }
   function runInequalities() {
-    const temps = assignTempNames();
+    assignTempNames();
     defaultInputZeros();
     const nameInput = document.getElementById("ineqName");
     nameInput.dataset.node = "";
     syncIneqPanel();
     draw();
     const columns = [];
-    const pushCol = (key, head, values) => columns.push({ key, head, values });
+    const seenHeads = /* @__PURE__ */ new Set();
+    const pushCol = (head, values) => {
+      if (!head || seenHeads.has(head)) return;
+      seenHeads.add(head);
+      columns.push({ key: head, head, values });
+    };
     for (const n of nodes) {
-      if (n.kind !== "iqInput") continue;
-      pushCol(n.id, ineqTrim(n), n.values.slice());
+      if (n.kind === "iqInput") pushCol(ineqTrim(n), n.values.slice());
     }
-    for (const w of wires) pushCol(w.id, ineqTrim(w), Array(ineqCount).fill(""));
     for (const n of nodes) {
-      if (n.kind !== "iqOutput") continue;
-      pushCol(n.id, ineqTrim(n), Array(ineqCount).fill(""));
+      if (n.kind === "iqOutput") pushCol(ineqTrim(n), Array(ineqCount).fill(""));
     }
+    for (const w of wires) pushCol(ineqTrim(w), Array(ineqCount).fill(""));
     const prevShown = ineqResult ? ineqResult.shown : null;
     const prevOrder = ineqResult ? ineqResult.order : [];
     const shown = {};
@@ -2625,16 +2676,9 @@
         if (!order.includes(col.key)) order.push(col.key);
       } else shown[col.key] = false;
     }
-    const built = buildIneqEquations();
-    const equations = built.lines.length ? built.lines.join("\n") : "No equations yet. Wire both sides of each +, \u2212, \u2264, and \u2265.";
-    ineqResult = { columns, shown, order, rows: ineqCount, equations };
+    ineqResult = { columns, shown, order, rows: ineqCount, equations: buildIneqEquations() };
     ineqTab = "table";
     renderIneqTable();
-    const notes = [];
-    if (temps.length) notes.push(`Unnamed items are ${temps.join(", ")}. Rename any of them in the sidebar.`);
-    if (built.gaps.length) notes.push(`${built.gaps.join(", ")} still need one wire on every side, so those were left out of the equations.`);
-    notes.push("Table and Equations show this run. Hide table keeps it, and Show table brings it back.");
-    setStatus(notes.join(" "));
   }
   function syncIneqPanel() {
     const idle = document.getElementById("ineqIdle");
@@ -2666,6 +2710,11 @@
       field.value = value;
       field.addEventListener("input", () => {
         node.values[i] = field.value;
+        for (const other of signalMembers(node).blocks) {
+          if (other.kind !== "iqInput" || other === node) continue;
+          ensureIneqValues(other);
+          other.values[i] = field.value;
+        }
       });
       label.appendChild(field);
       values.appendChild(label);
@@ -2704,7 +2753,7 @@
     }
     if (mode === "gears") {
       document.getElementById("ineqWrap").hidden = true;
-      if (!scenarioRows.length) document.getElementById("btnShowTable").hidden = true;
+      if (!scenarioRows.length) syncResultsRibbon();
     }
     renderPalette();
     syncRpmPanel();
@@ -2727,10 +2776,8 @@
     const target = node || wire;
     if (!target) return;
     const value = document.getElementById("ineqName").value;
-    if (node && isIneqEndpoint(node)) shareName(node, value, /* @__PURE__ */ new Set());
-    else if (wire && endpointBlocks(wire).length) {
-      for (const end of endpointBlocks(wire)) shareName(end, value, /* @__PURE__ */ new Set());
-    } else target.label = value;
+    if (wire || node && isIneqEndpoint(node)) applySignalName(target, value);
+    else target.label = value;
     draw();
   });
   document.getElementById("btnHideIneq").onclick = () => {
@@ -2765,7 +2812,7 @@
     syncTableChrome();
     resize();
   };
-  document.getElementById("btnShowTable").onclick = () => {
+  document.getElementById("resultsRibbon").onclick = () => {
     if (appMode === "inequalities") {
       if (!ineqResult) return;
       renderIneqTable();
