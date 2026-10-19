@@ -951,6 +951,7 @@
   var selectedCorner = null;
   var wireFrom = null;
   var drag = null;
+  var pendingNameFocus = false;
   var cornerDrag = null;
   var panDrag = null;
   var splitDrag = null;
@@ -1089,6 +1090,14 @@
     return null;
   }
   function setStatus() {}
+  function focusNameField() {
+    const field = appMode === "inequalities" ? document.getElementById("ineqName") : nodeLabelInput;
+    const panel = appMode === "inequalities" ? document.getElementById("ineqEdit") : document.getElementById("nodePanel");
+    if (!field || !panel || panel.hidden) return;
+    field.focus();
+    const end = field.value.length;
+    if (typeof field.setSelectionRange === "function") field.setSelectionRange(end, end);
+  }
   function syncRpmPanel() {
     if (appMode === "inequalities") {
       nodePanel.hidden = true;
@@ -1511,6 +1520,11 @@
       selectedId = null;
       setStatus("Wire selected. Name it in the sidebar, or press Delete to remove it.");
       syncRpmPanel();
+      if (appMode === "inequalities") {
+        e.preventDefault();
+        pendingNameFocus = true;
+        focusNameField();
+      }
       draw();
       return;
     }
@@ -1526,6 +1540,9 @@
         if (n.kind === "input") setStatus("Input selected. Name it, then choose a pattern.");
         else setStatus(`${blockTitle(n)} selected. Name it in the sidebar.`);
         syncRpmPanel();
+        e.preventDefault();
+        pendingNameFocus = true;
+        focusNameField();
       }
       draw();
       return;
@@ -1552,6 +1569,9 @@
       selectedCorner = null;
       setStatus(armed.kind === "input" ? "Placed Input. Choose All 0, All 1, or a count pattern." : `Placed ${placeTitle(armed.kind)}. Click a dot, then another dot.`);
       syncRpmPanel();
+      e.preventDefault();
+      pendingNameFocus = true;
+      focusNameField();
       draw();
       return;
     }
@@ -1589,10 +1609,16 @@
   }, { passive: false });
   window.addEventListener("mouseup", () => {
     if (drag && drag.wasSelected && !drag.moved) {
+      pendingNameFocus = false;
       selectedId = null;
       setStatus("Unselected.");
       syncRpmPanel();
+      const active = document.activeElement;
+      if (active && (active.id === "ineqName" || active.id === "nodeLabel") && active.blur) active.blur();
       draw();
+    } else if (pendingNameFocus) {
+      pendingNameFocus = false;
+      focusNameField();
     }
     drag = null;
     cornerDrag = null;
@@ -2940,6 +2966,8 @@
       return;
     }
     if (e.key === "Enter") {
+      const typing = e.target;
+      if (typing && (typing.tagName === "INPUT" || typing.tagName === "TEXTAREA" || typing.isContentEditable)) return;
       e.preventDefault();
       run();
       return;
