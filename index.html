@@ -72,7 +72,6 @@
   body.ineq #btnXl,
   body.ineq #btnSave,
   body.ineq #btnUpload,
-  body.ineq #btnShowTable,
   body.ineq #btnPrevSol,
   body.ineq #btnNextSol,
   body.ineq #gearControls,
@@ -81,12 +80,18 @@
   #ineqHint, #ineqPanel { display: none; }
   body.ineq #ineqHint, body.ineq #ineqPanel { display: block; }
   #ineqWrap { position: relative; z-index: 2; max-height: 38vh; overflow: auto; padding: 8px 14px 14px; background: var(--paper); border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); }
-  #ineqBar { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+  #ineqBar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+  #ineqTabs { display: flex; gap: 6px; }
   #ineqBar button { height: 26px; }
+  #ineqChecks label { display: inline-flex; align-items: center; gap: 4px; width: auto; margin: 0 14px 8px 0; font-size: 12px; opacity: 1; }
+  #ineqChecks input { width: auto; height: auto; margin: 0; }
   #ineqTable { border-collapse: collapse; font-size: 13px; }
   #ineqTable th, #ineqTable td { border: 1px solid #9aafbf; padding: 4px 8px; white-space: nowrap; }
   #ineqTable th { background: #e7eef3; text-align: left; }
-  #ineqTable input { width: 88px; height: 26px; margin: 0; }
+  #ineqTable th .moves { display: inline-flex; gap: 2px; margin-left: 6px; vertical-align: middle; }
+  #ineqTable th button { height: 18px; padding: 0 5px; font-size: 11px; }
+  #ineqTable td { text-align: right; }
+  #ineqEquations { margin: 4px 0 8px; font: 15px/1.7 Figtree, system-ui, sans-serif; white-space: pre-wrap; }
 </style>
 </head>
 <body>
@@ -143,7 +148,7 @@
         </div>
       </div>
       <p class="hint" id="gearHint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.<br/>Theoretical solves the speeds directly. Mechanical spins the inputs up through springs, inertia, and ratchet friction, and the table adds torque.<br/>Save writes a JSON file of this diagram, the scenario lists, and the results. Upload reads one back.</p>
-      <p class="hint" id="ineqHint">Place a block, then click the canvas. Click a placed block or a wire to edit it here. Nothing is calculated yet: Run only opens the table.</p>
+      <p class="hint" id="ineqHint">Place a block, then click the canvas. Click a placed block or a wire to name it. Click a selected block again to deselect it.<br/>Run names anything still blank (t1, t2, …), fills empty input scenarios with 0, and opens the table. The Equations tab lists what the wires imply. Hide table puts the results away; Show table brings that same run back.</p>
       <div id="ineqPanel">
         <div id="ineqIdle">
           <label>Scenarios
@@ -165,8 +170,16 @@
     <div id="stage"><canvas id="c"></canvas></div>
   </main>
   <section id="ineqWrap" hidden>
-    <div id="ineqBar"><button type="button" id="btnHideIneq">Hide table</button></div>
+    <div id="ineqBar">
+      <div id="ineqTabs">
+        <button type="button" id="btnIneqTabTable" class="primary">Table</button>
+        <button type="button" id="btnIneqTabEq">Equations</button>
+      </div>
+      <button type="button" id="btnHideIneq">Hide table</button>
+    </div>
+    <div id="ineqChecks"></div>
     <div id="ineqScroll"><table id="ineqTable"></table></div>
+    <div id="ineqEquations" hidden></div>
   </section>
   <section id="truthWrap" hidden>
     <div id="truthBar"><button type="button" id="btnHideTable">Hide table</button></div>
@@ -928,7 +941,8 @@
   var gearSnap = null;
   var ineqSnap = null;
   var ineqCount = 4;
-  var ineqCells = {};
+  var ineqResult = null;
+  var ineqTab = "table";
   var nodes = [];
   var wires = [];
   var armed = null;
@@ -1426,10 +1440,13 @@
       panX = panDrag.panX + (screen.x - panDrag.sx);
       panY = panDrag.panY + (screen.y - panDrag.sy);
     } else if (drag) {
-      const n = nodes.find((x) => x.id === drag.id);
-      if (n) {
-        n.x = p.x - drag.ox;
-        n.y = p.y - drag.oy;
+      if (!drag.moved && Math.hypot(screen.x - drag.sx, screen.y - drag.sy) > 3) drag.moved = true;
+      if (drag.moved || !drag.wasSelected) {
+        const n = nodes.find((x) => x.id === drag.id);
+        if (n) {
+          n.x = p.x - drag.ox;
+          n.y = p.y - drag.oy;
+        }
       }
     }
     draw();
@@ -1497,13 +1514,17 @@
     }
     const n = hitNode(p.x, p.y);
     if (n && !armed) {
+      const screen = screenXY(e);
+      const already = appMode === "inequalities" && n.id === selectedId;
       selectedId = n.id;
       selectedWireId = null;
       selectedCorner = null;
-      drag = { id: n.id, ox: p.x - n.x, oy: p.y - n.y };
-      if (n.kind === "input") setStatus("Input selected. Name it, then choose a pattern.");
-      else setStatus(`${blockTitle(n)} selected. Name it in the sidebar.`);
-      syncRpmPanel();
+      drag = { id: n.id, ox: p.x - n.x, oy: p.y - n.y, sx: screen.x, sy: screen.y, wasSelected: already, moved: false };
+      if (!already) {
+        if (n.kind === "input") setStatus("Input selected. Name it, then choose a pattern.");
+        else setStatus(`${blockTitle(n)} selected. Name it in the sidebar.`);
+        syncRpmPanel();
+      }
       draw();
       return;
     }
@@ -1565,6 +1586,12 @@
     }
   }, { passive: false });
   window.addEventListener("mouseup", () => {
+    if (drag && drag.wasSelected && !drag.moved) {
+      selectedId = null;
+      setStatus("Unselected.");
+      syncRpmPanel();
+      draw();
+    }
     drag = null;
     cornerDrag = null;
     panDrag = null;
@@ -1644,7 +1671,9 @@
     selectedWireId = null;
     wireFrom = null;
     if (appMode === "inequalities") {
+      ineqResult = null;
       document.getElementById("ineqWrap").hidden = true;
+      syncIneqChrome();
       setStatus("Cleared. Click a block, then the canvas.");
       renderPalette();
       syncRpmPanel();
@@ -2172,7 +2201,7 @@
   }
   function run() {
     if (appMode === "inequalities") {
-      renderIneqTable();
+      runInequalities();
       return;
     }
     for (const n of nodes) ensureSeries(n);
@@ -2340,65 +2369,234 @@
     while (next.length < ineqCount) next.push("");
     n.values = next.map((v) => v == null ? "" : String(v));
   }
-  function ineqColumns() {
-    const cols = [];
+  function ineqTrim(item) {
+    return String(item && item.label || "").trim();
+  }
+  function assignTempNames() {
+    const used = new Set();
     for (const n of nodes) {
-      if (n.kind === "iqInput" && String(n.label || "").trim()) cols.push({ key: n.id, head: String(n.label).trim() });
+      const name = ineqTrim(n);
+      if (name) used.add(name);
     }
     for (const w of wires) {
-      if (String(w.label || "").trim()) cols.push({ key: w.id, head: String(w.label).trim() });
+      const name = ineqTrim(w);
+      if (name) used.add(name);
     }
+    let i = 1;
+    const given = [];
+    const targets = [
+      ...nodes.filter((n) => n.kind === "iqInput"),
+      ...nodes.filter((n) => n.kind === "iqOutput"),
+      ...wires
+    ];
+    for (const item of targets) {
+      if (ineqTrim(item)) continue;
+      while (used.has(`t${i}`)) i += 1;
+      item.label = `t${i}`;
+      used.add(item.label);
+      given.push(item.label);
+      i += 1;
+    }
+    return given;
+  }
+  function defaultInputZeros() {
     for (const n of nodes) {
-      if (n.kind === "iqOutput" && String(n.label || "").trim()) cols.push({ key: n.id, head: String(n.label).trim() });
+      if (n.kind !== "iqInput") continue;
+      ensureIneqValues(n);
+      n.values = n.values.map((v) => String(v).trim() === "" ? "0" : String(v));
     }
-    return cols;
+  }
+  function wiresOnPort(nodeId, portId) {
+    return wires.filter((w) => (w.from === nodeId && w.fromPort === portId) || (w.to === nodeId && w.toPort === portId));
+  }
+  function buildIneqEquations() {
+    const lines = [];
+    const gaps = [];
+    for (const n of nodes) {
+      const symbol = n.kind === "plus" || n.kind === "minus" || n.kind === "leq" || n.kind === "geq";
+      if (!symbol) continue;
+      const ports = n.kind === "plus" || n.kind === "minus" ? ["a", "b", "out"] : ["left", "right"];
+      const names = {};
+      let missing = false;
+      for (const portId of ports) {
+        const attached = wiresOnPort(n.id, portId);
+        if (attached.length !== 1) {
+          missing = true;
+          break;
+        }
+        names[portId] = ineqTrim(attached[0]);
+      }
+      if (missing) {
+        gaps.push(n.kind === "plus" ? "+" : n.kind === "minus" ? "\u2212" : n.kind === "leq" ? "\u2264" : "\u2265");
+        continue;
+      }
+      if (n.kind === "plus") lines.push(`${names.out} = ${names.a} + ${names.b}`);
+      else if (n.kind === "minus") lines.push(`${names.out} = ${names.a} \u2212 ${names.b}`);
+      else if (n.kind === "leq") lines.push(`${names.left} \u2264 ${names.right}`);
+      else lines.push(`${names.left} \u2265 ${names.right}`);
+    }
+    return { lines, gaps };
+  }
+  function syncIneqChrome() {
+    if (appMode !== "inequalities") return;
+    const wrap = document.getElementById("ineqWrap");
+    document.getElementById("btnShowTable").hidden = !ineqResult || !wrap.hidden;
+  }
+  function showIneqTab(tab) {
+    ineqTab = tab === "equations" ? "equations" : "table";
+    const tableOn = ineqTab === "table";
+    document.getElementById("ineqScroll").hidden = !tableOn;
+    document.getElementById("ineqChecks").hidden = !tableOn;
+    document.getElementById("ineqEquations").hidden = tableOn;
+    document.getElementById("btnIneqTabTable").className = tableOn ? "primary" : "";
+    document.getElementById("btnIneqTabEq").className = tableOn ? "" : "primary";
+  }
+  function moveIneqColumn(key, dir) {
+    if (!ineqResult) return;
+    const order = ineqResult.order;
+    const i = order.indexOf(key);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= order.length) return;
+    const swap = order[i];
+    order[i] = order[j];
+    order[j] = swap;
+    renderIneqTable();
   }
   function renderIneqTable() {
     const wrap = document.getElementById("ineqWrap");
     const table = document.getElementById("ineqTable");
+    const checks = document.getElementById("ineqChecks");
+    const equations = document.getElementById("ineqEquations");
+    if (!ineqResult) {
+      wrap.hidden = true;
+      syncIneqChrome();
+      return;
+    }
+    const wasHidden = wrap.hidden;
     wrap.hidden = false;
-    const cols = ineqColumns();
+    syncIneqChrome();
+    checks.innerHTML = "";
+    const byKey = new Map(ineqResult.columns.map((col) => [col.key, col]));
+    for (const col of ineqResult.columns) {
+      const label = document.createElement("label");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = !!ineqResult.shown[col.key];
+      box.addEventListener("change", () => {
+        ineqResult.shown[col.key] = box.checked;
+        if (box.checked) {
+          if (!ineqResult.order.includes(col.key)) ineqResult.order.push(col.key);
+        } else {
+          ineqResult.order = ineqResult.order.filter((key) => key !== col.key);
+        }
+        renderIneqTable();
+      });
+      label.appendChild(box);
+      label.appendChild(document.createTextNode(` ${col.head}`));
+      checks.appendChild(label);
+    }
     table.innerHTML = "";
     const thead = document.createElement("thead");
     const hr = document.createElement("tr");
     const corner = document.createElement("th");
     corner.textContent = "Scenario";
     hr.appendChild(corner);
-    if (!cols.length) {
+    const visible = ineqResult.order.map((key) => byKey.get(key)).filter(Boolean);
+    if (!visible.length) {
       const th = document.createElement("th");
-      th.textContent = "Name an input, a wire, or an output";
+      th.textContent = "Tick a name above to add a column";
       hr.appendChild(th);
     }
-    for (const col of cols) {
+    visible.forEach((col, index) => {
       const th = document.createElement("th");
-      th.textContent = col.head;
+      th.appendChild(document.createTextNode(col.head));
+      const moves = document.createElement("span");
+      moves.className = "moves";
+      if (index > 0) {
+        const left = document.createElement("button");
+        left.type = "button";
+        left.textContent = "\u2190";
+        left.title = "Move left";
+        left.addEventListener("click", () => moveIneqColumn(col.key, -1));
+        moves.appendChild(left);
+      }
+      if (index < visible.length - 1) {
+        const right = document.createElement("button");
+        right.type = "button";
+        right.textContent = "\u2192";
+        right.title = "Move right";
+        right.addEventListener("click", () => moveIneqColumn(col.key, 1));
+        moves.appendChild(right);
+      }
+      if (moves.childNodes.length) th.appendChild(moves);
       hr.appendChild(th);
-    }
+    });
     thead.appendChild(hr);
     table.appendChild(thead);
     const tbody = document.createElement("tbody");
-    for (let i = 0; i < ineqCount; i++) {
+    for (let i = 0; i < ineqResult.rows; i++) {
       const tr = document.createElement("tr");
       const th = document.createElement("td");
       th.textContent = String(i + 1);
       tr.appendChild(th);
-      if (!cols.length) tr.appendChild(document.createElement("td"));
-      for (const col of cols) {
+      if (!visible.length) tr.appendChild(document.createElement("td"));
+      for (const col of visible) {
         const td = document.createElement("td");
-        const field = document.createElement("input");
-        field.type = "text";
-        const key = `${col.key}:${i}`;
-        field.value = ineqCells[key] || "";
-        field.addEventListener("input", () => {
-          ineqCells[key] = field.value;
-        });
-        td.appendChild(field);
+        td.textContent = col.values[i] || "";
         tr.appendChild(td);
       }
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
-    resize();
+    equations.textContent = ineqResult.equations;
+    showIneqTab(ineqTab);
+    if (wasHidden) resize();
+  }
+  function runInequalities() {
+    const temps = assignTempNames();
+    defaultInputZeros();
+    const nameInput = document.getElementById("ineqName");
+    nameInput.dataset.node = "";
+    syncIneqPanel();
+    draw();
+    const columns = [];
+    const pushCol = (key, head, values) => columns.push({ key, head, values });
+    for (const n of nodes) {
+      if (n.kind !== "iqInput") continue;
+      pushCol(n.id, ineqTrim(n), n.values.slice());
+    }
+    for (const w of wires) pushCol(w.id, ineqTrim(w), Array(ineqCount).fill(""));
+    for (const n of nodes) {
+      if (n.kind !== "iqOutput") continue;
+      pushCol(n.id, ineqTrim(n), Array(ineqCount).fill(""));
+    }
+    const prevShown = ineqResult ? ineqResult.shown : null;
+    const prevOrder = ineqResult ? ineqResult.order : [];
+    const shown = {};
+    const order = [];
+    for (const key of prevOrder) {
+      if (columns.some((col) => col.key === key) && prevShown[key]) {
+        shown[key] = true;
+        order.push(key);
+      }
+    }
+    for (const col of columns) {
+      const known = !!(prevShown && Object.prototype.hasOwnProperty.call(prevShown, col.key));
+      if (!known || prevShown[col.key]) {
+        shown[col.key] = true;
+        if (!order.includes(col.key)) order.push(col.key);
+      } else shown[col.key] = false;
+    }
+    const built = buildIneqEquations();
+    const equations = built.lines.length ? built.lines.join("\n") : "No equations yet. Wire both sides of each +, \u2212, \u2264, and \u2265.";
+    ineqResult = { columns, shown, order, rows: ineqCount, equations };
+    ineqTab = "table";
+    renderIneqTable();
+    const notes = [];
+    if (temps.length) notes.push(`Unnamed items are ${temps.join(", ")}. Rename any of them in the sidebar.`);
+    if (built.gaps.length) notes.push(`${built.gaps.join(", ")} still need one wire on every side, so those were left out of the equations.`);
+    notes.push("Table and Equations show this run. Hide table keeps it, and Show table brings it back.");
+    setStatus(notes.join(" "));
   }
   function syncIneqPanel() {
     const idle = document.getElementById("ineqIdle");
@@ -2414,7 +2612,11 @@
     values.innerHTML = "";
     if (!target) return;
     const name = document.getElementById("ineqName");
-    if (document.activeElement !== name) name.value = target.label || "";
+    const focusId = target.id;
+    if (name.dataset.node !== focusId || document.activeElement !== name) {
+      name.dataset.node = focusId;
+      name.value = target.label || "";
+    }
     if (!(node && node.kind === "iqInput")) return;
     ensureIneqValues(node);
     node.values.forEach((value, i) => {
@@ -2458,8 +2660,14 @@
     document.getElementById("btnGears").className = mode === "gears" ? "primary" : "";
     document.getElementById("btnIneq").className = mode === "inequalities" ? "primary" : "";
     document.querySelector(".sub").textContent = mode === "inequalities" ? "Inequalities \u00b7 place a block, then wire the dots" : "Local file \u00b7 click any port, click corners, click another port \u2192 Run";
-    if (mode === "inequalities") document.getElementById("truthWrap").hidden = true;
-    if (mode === "gears") document.getElementById("ineqWrap").hidden = true;
+    if (mode === "inequalities") {
+      document.getElementById("truthWrap").hidden = true;
+      syncIneqChrome();
+    }
+    if (mode === "gears") {
+      document.getElementById("ineqWrap").hidden = true;
+      if (!scenarioRows.length) document.getElementById("btnShowTable").hidden = true;
+    }
     renderPalette();
     syncRpmPanel();
     if (mode === "gears" && scenarioRows.length) renderTruth();
@@ -2474,7 +2682,6 @@
     ineqCount = Math.min(16, Math.max(1, Number.isFinite(v) ? v : 1));
     document.getElementById("ineqCount").value = String(ineqCount);
     for (const n of nodes) if (n.kind === "iqInput") ensureIneqValues(n);
-    if (!document.getElementById("ineqWrap").hidden) renderIneqTable();
   });
   document.getElementById("ineqName").addEventListener("input", () => {
     const node = nodes.find((n) => n.id === selectedId);
@@ -2486,8 +2693,11 @@
   });
   document.getElementById("btnHideIneq").onclick = () => {
     document.getElementById("ineqWrap").hidden = true;
+    syncIneqChrome();
     resize();
   };
+  document.getElementById("btnIneqTabTable").onclick = () => showIneqTab("table");
+  document.getElementById("btnIneqTabEq").onclick = () => showIneqTab("equations");
   document.getElementById("btnXl").onclick = loadXl;
   document.getElementById("btnClear").onclick = clearAll;
   document.getElementById("btnSave").onclick = saveFile;
@@ -2514,6 +2724,12 @@
     resize();
   };
   document.getElementById("btnShowTable").onclick = () => {
+    if (appMode === "inequalities") {
+      if (!ineqResult) return;
+      renderIneqTable();
+      resize();
+      return;
+    }
     tableClosed = false;
     renderTruth();
     resize();
