@@ -951,6 +951,17 @@
     }
     n.series = fillSeries(n.shape, scenarioCount);
   }
+  function placeTitle(kind) {
+    const items = appMode === "inequalities" ? INEQ_PALETTE : PALETTE;
+    const item = items.find((entry) => entry.kind === kind);
+    if (item) return item.title;
+    if (kind === "iqInput" || kind === "input") return "Input";
+    if (kind === "plus") return "+";
+    if (kind === "minus") return "\u2212";
+    if (kind === "leq") return "\u2264";
+    if (kind === "geq") return "\u2265";
+    return kind;
+  }
   function blockTitle(n) {
     if (n.label && n.kind !== "plus" && n.kind !== "minus" && n.kind !== "leq" && n.kind !== "geq") return n.label;
     if (n.kind === "input" || n.kind === "iqInput") return n.label || "Input";
@@ -1265,7 +1276,7 @@
       ctx.fillStyle = "#d97706";
       ctx.font = "13px system-ui,sans-serif";
       ctx.textAlign = "left";
-      ctx.fillText(`Placing ${armed.kind} \u2014 click canvas (click again in palette to cancel)`, 16, 24);
+      ctx.fillText(`Placing ${placeTitle(armed.kind)} \u2014 click the canvas (click again in the palette to cancel)`, 16, 24);
     }
     updateCursor();
   }
@@ -1438,7 +1449,7 @@
       selectedId = made.id;
       selectedWireId = null;
       selectedCorner = null;
-      setStatus(armed.kind === "input" ? "Placed Input. Choose All 0, All 1, or a count pattern." : `Placed ${armed.kind}. Click any port, then any other port.`);
+      setStatus(armed.kind === "input" ? "Placed Input. Choose All 0, All 1, or a count pattern." : `Placed ${placeTitle(armed.kind)}. Click a dot, then another dot.`);
       syncRpmPanel();
       draw();
       return;
@@ -2273,7 +2284,7 @@
     renderPalette();
     syncRpmPanel();
     if (mode === "gears" && scenarioRows.length) renderTruth();
-    else draw();
+    resize();
     setStatus(mode === "inequalities" ? "Inequalities. Place Input, +, \u2212, \u2264, or \u2265." : "Gears.");
   }
   document.getElementById("btnGears").onclick = () => setAppMode("gears");
