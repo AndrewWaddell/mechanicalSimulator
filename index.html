@@ -69,6 +69,18 @@
   #truth tr.viewing td { background: color-mix(in srgb, var(--signal) 18%, white); }
   #status { font-size: 14px; }
   .hint { font-size: 11px; opacity: 0.65; line-height: 1.35; margin-top: 8px; }
+  body.ineq #btnXl,
+  body.ineq #btnSave,
+  body.ineq #btnUpload,
+  body.ineq #btnRun,
+  body.ineq #btnShowTable,
+  body.ineq #btnPrevSol,
+  body.ineq #btnNextSol,
+  body.ineq #gearControls,
+  body.ineq #gearHint,
+  body.ineq #truthWrap { display: none !important; }
+  #ineqHint { display: none; }
+  body.ineq #ineqHint { display: block; }
 </style>
 </head>
 <body>
@@ -78,6 +90,8 @@
       <div class="sub">Local file · click any port, click corners, click another port → Run</div>
     </div>
     <div class="row">
+      <button type="button" id="btnGears" class="primary">Gears</button>
+      <button type="button" id="btnIneq">Inequalities</button>
       <button type="button" id="btnXl">Load XL demo</button>
       <button type="button" id="btnClear">Clear</button>
       <button type="button" id="btnSave">Save</button>
@@ -99,6 +113,7 @@
       </div>
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;opacity:.6;margin-bottom:8px;">Blocks</div>
       <div id="palette"></div>
+      <div id="gearControls">
       <label>Scenarios<input id="scenarioCount" type="number" min="1" max="64" value="8"></label>
       <label>Solver
         <select id="solverMode">
@@ -106,6 +121,7 @@
           <option value="mechanical">Mechanical</option>
         </select>
       </label>
+      </div>
       <div id="nodePanel" hidden>
         <label>Label<input id="nodeLabel" type="text" placeholder="Name on the diagram"></label>
         <div id="portPanel"></div>
@@ -120,7 +136,8 @@
           <div id="seriesBox"></div>
         </div>
       </div>
-      <p class="hint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.<br/>Theoretical solves the speeds directly. Mechanical spins the inputs up through springs, inertia, and ratchet friction, and the table adds torque.<br/>Save writes a JSON file of this diagram, the scenario lists, and the results. Upload reads one back.</p>
+      <p class="hint" id="gearHint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.<br/>Theoretical solves the speeds directly. Mechanical spins the inputs up through springs, inertia, and ratchet friction, and the table adds torque.<br/>Save writes a JSON file of this diagram, the scenario lists, and the results. Upload reads one back.</p>
+      <p class="hint" id="ineqHint">Place: click a block, then the canvas (click it again to cancel).<br/>Wire: click a dot, click the canvas for corners, then click another dot.<br/>Input connects on the right. ≤ and ≥ connect on the left and the right. + and − have two dots on the left and one on the right.</p>
     </aside>
     <div id="splitter" title="Drag to resize the panel"><span id="showSide">Show panel</span></div>
     <div id="stage"><canvas id="c"></canvas></div>
@@ -737,7 +754,26 @@
       { id: "in", label: "In" },
       { id: "out", label: "Out" }
     ],
-    input: [{ id: "io", label: "" }]
+    input: [{ id: "io", label: "" }],
+    iqInput: [{ id: "io", label: "" }],
+    plus: [
+      { id: "a", label: "" },
+      { id: "b", label: "" },
+      { id: "out", label: "" }
+    ],
+    minus: [
+      { id: "a", label: "" },
+      { id: "b", label: "" },
+      { id: "out", label: "" }
+    ],
+    leq: [
+      { id: "left", label: "" },
+      { id: "right", label: "" }
+    ],
+    geq: [
+      { id: "left", label: "" },
+      { id: "right", label: "" }
+    ]
   };
   var PORT_EDGE = {
     pgs: { sun: "bottom", ring: "bottom", carrier: "top" },
@@ -745,7 +781,12 @@
     oneWay: { carrier: "bottom", wheel: "top" },
     xl: { ring: "bottom", sun: "bottom", carrier: "top", "1wm": "top" },
     inverter: { in: "bottom", out: "top" },
-    input: { io: "top" }
+    input: { io: "top" },
+    iqInput: { io: "right" },
+    plus: { a: "left", b: "left", out: "right" },
+    minus: { a: "left", b: "left", out: "right" },
+    leq: { left: "left", right: "right" },
+    geq: { left: "left", right: "right" }
   };
   function isSourceOnly(kind) {
     return kind === "input";
@@ -847,6 +888,16 @@
     { kind: "xl", title: "XL" },
     { kind: "input", title: "Input", rpm: 1 }
   ];
+  var INEQ_PALETTE = [
+    { kind: "iqInput", title: "Input" },
+    { kind: "plus", title: "+" },
+    { kind: "minus", title: "\u2212" },
+    { kind: "leq", title: "\u2264" },
+    { kind: "geq", title: "\u2265" }
+  ];
+  var appMode = "gears";
+  var gearSnap = null;
+  var ineqSnap = null;
   var nodes = [];
   var wires = [];
   var armed = null;
@@ -901,8 +952,12 @@
     n.series = fillSeries(n.shape, scenarioCount);
   }
   function blockTitle(n) {
-    if (n.label) return n.label;
-    if (n.kind === "input") return "Input";
+    if (n.label && n.kind !== "plus" && n.kind !== "minus" && n.kind !== "leq" && n.kind !== "geq") return n.label;
+    if (n.kind === "input" || n.kind === "iqInput") return n.label || "Input";
+    if (n.kind === "plus") return "+";
+    if (n.kind === "minus") return "\u2212";
+    if (n.kind === "leq") return "\u2264";
+    if (n.kind === "geq") return "\u2265";
     if (n.kind === "oneWay") return "1WM";
     if (n.kind === "inverter") return "Inverter";
     return n.kind.toUpperCase();
@@ -922,12 +977,17 @@
     draw();
   }
   function nodeW(n) {
+    if (n.kind === "iqInput") return 108;
+    if (n.kind === "leq" || n.kind === "geq") return 84;
+    if (n.kind === "plus" || n.kind === "minus") return 120;
     return n.kind === "input" ? 96 : 220;
   }
   function portEdge(kind, portId) {
     return PORT_EDGE[kind][portId];
   }
   function nodeH(n) {
+    if (n.kind === "leq" || n.kind === "geq" || n.kind === "iqInput") return 64;
+    if (n.kind === "plus" || n.kind === "minus") return 88;
     const edges = new Set(BLOCK_PORTS[n.kind].map((p) => portEdge(n.kind, p.id)));
     return edges.has("top") && edges.has("bottom") ? 96 : 56;
   }
@@ -938,9 +998,18 @@
     const edge = portEdge(n.kind, portId);
     const group = portsOnEdge(n, edge);
     const i = group.findIndex((p) => p.id === portId);
+    const ww = nodeW(n);
+    const hh = nodeH(n);
+    if (edge === "left" || edge === "right") {
+      return {
+        x: edge === "left" ? n.x : n.x + ww,
+        y: n.y + hh * (i + 1) / (group.length + 1),
+        edge
+      };
+    }
     return {
-      x: n.x + nodeW(n) * (i + 1) / (group.length + 1),
-      y: edge === "top" ? n.y : n.y + nodeH(n),
+      x: n.x + ww * (i + 1) / (group.length + 1),
+      y: edge === "top" ? n.y : n.y + hh,
       edge
     };
   }
@@ -968,6 +1037,12 @@
     statusEl.style.fontWeight = bad ? "700" : "";
   }
   function syncRpmPanel() {
+    if (appMode === "inequalities") {
+      nodePanel.hidden = true;
+      inputPanel.hidden = true;
+      portPanel.hidden = true;
+      return;
+    }
     const selected = nodes.find((n) => n.id === selectedId);
     nodePanel.hidden = !selected;
     inputPanel.hidden = !selected || selected.kind !== "input";
@@ -1131,12 +1206,15 @@
       ctx.fillStyle = "#0b3a4a";
       ctx.font = "600 14px system-ui,sans-serif";
       let title;
-      if (n.label) title = n.label;
-      else if (n.kind === "input") title = "Input";
+      const symbol = n.kind === "plus" || n.kind === "minus" || n.kind === "leq" || n.kind === "geq";
+      if (symbol) title = blockTitle(n);
+      else if (n.label) title = n.label;
+      else if (n.kind === "input" || n.kind === "iqInput") title = "Input";
       else if (n.kind === "oneWay") title = "1WM";
       else if (n.kind === "inverter") title = "Inverter";
       else title = n.kind.toUpperCase();
-      ctx.fillText(title, n.x + ww / 2, n.y + hh / 2 + 5);
+      ctx.font = symbol ? "600 28px system-ui,sans-serif" : "600 14px system-ui,sans-serif";
+      ctx.fillText(title, n.x + ww / 2, n.y + hh / 2 + (symbol ? 10 : 5));
       for (const p of BLOCK_PORTS[n.kind]) {
         const pos = portPos(n, p.id);
         const rpmText = n.kind !== "input" && ((_b = n.results) == null ? void 0 : _b[p.id]) !== void 0 ? `${n.results[p.id]} rpm` : "";
@@ -1414,7 +1492,8 @@
   function renderPalette() {
     const el = document.getElementById("palette");
     el.innerHTML = "";
-    for (const item of PALETTE) {
+    const items = appMode === "inequalities" ? INEQ_PALETTE : PALETTE;
+    for (const item of items) {
       const b = document.createElement("button");
       b.type = "button";
       b.textContent = item.title;
@@ -1475,6 +1554,13 @@
     selectedId = null;
     selectedWireId = null;
     wireFrom = null;
+    if (appMode === "inequalities") {
+      setStatus("Cleared. Click a block, then the canvas.");
+      renderPalette();
+      syncRpmPanel();
+      draw();
+      return;
+    }
     setStatus("Cleared. Click a block, then click the canvas.");
     solutionSets = [];
     scenarioRows = [];
@@ -1995,6 +2081,7 @@
     if (scenarioRows.length) renderTruth();
   }
   function run() {
+    if (appMode === "inequalities") return;
     for (const n of nodes) ensureSeries(n);
     scenarioRows = [];
     for (let i = 0; i < scenarioCount; i++) scenarioRows.push(solveScenario(i));
@@ -2155,6 +2242,42 @@
     draw();
     setStatus("Loaded configuration.");
   }
+  function takeSnap() {
+    return { nodes, wires, panX, panY, zoom, seq };
+  }
+  function putSnap(s) {
+    nodes = s.nodes;
+    wires = s.wires;
+    panX = s.panX;
+    panY = s.panY;
+    zoom = s.zoom;
+    seq = s.seq;
+  }
+  function setAppMode(mode) {
+    if (mode === appMode) return;
+    const snap = takeSnap();
+    if (appMode === "gears") gearSnap = snap;
+    else ineqSnap = snap;
+    appMode = mode;
+    putSnap(mode === "gears" ? gearSnap : ineqSnap || { nodes: [], wires: [], panX: 0, panY: 0, zoom: 1, seq: 1 });
+    armed = null;
+    selectedId = null;
+    selectedWireId = null;
+    selectedCorner = null;
+    wireFrom = null;
+    document.body.classList.toggle("ineq", mode === "inequalities");
+    document.getElementById("btnGears").className = mode === "gears" ? "primary" : "";
+    document.getElementById("btnIneq").className = mode === "inequalities" ? "primary" : "";
+    document.querySelector(".sub").textContent = mode === "inequalities" ? "Inequalities \u00b7 place a block, then wire the dots" : "Local file \u00b7 click any port, click corners, click another port \u2192 Run";
+    if (mode === "inequalities") document.getElementById("truthWrap").hidden = true;
+    renderPalette();
+    syncRpmPanel();
+    if (mode === "gears" && scenarioRows.length) renderTruth();
+    else draw();
+    setStatus(mode === "inequalities" ? "Inequalities. Place Input, +, \u2212, \u2264, or \u2265." : "Gears.");
+  }
+  document.getElementById("btnGears").onclick = () => setAppMode("gears");
+  document.getElementById("btnIneq").onclick = () => setAppMode("inequalities");
   document.getElementById("btnXl").onclick = loadXl;
   document.getElementById("btnClear").onclick = clearAll;
   document.getElementById("btnSave").onclick = saveFile;
