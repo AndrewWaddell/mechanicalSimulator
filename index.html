@@ -79,7 +79,7 @@
   body.ineq #truthWrap { display: none !important; }
   #ineqHint, #ineqPanel { display: none; }
   body.ineq #ineqHint, body.ineq #ineqPanel { display: block; }
-  #ineqWrap { position: relative; z-index: 2; max-height: 38vh; overflow: auto; padding: 8px 14px 14px; background: var(--paper); border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); }
+  #ineqWrap { position: relative; z-index: 2; height: 38vh; max-height: 38vh; overflow: auto; padding: 8px 14px 14px; background: var(--paper); border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); }
   #ineqBar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
   #ineqTabs { display: flex; gap: 6px; }
   #ineqBar button { height: 26px; }
@@ -148,7 +148,7 @@
         </div>
       </div>
       <p class="hint" id="gearHint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.<br/>Theoretical solves the speeds directly. Mechanical spins the inputs up through springs, inertia, and ratchet friction, and the table adds torque.<br/>Save writes a JSON file of this diagram, the scenario lists, and the results. Upload reads one back.</p>
-      <p class="hint" id="ineqHint">Place a block, then click the canvas. Click a placed block or a wire to name it. Click a selected block again to deselect it.<br/>Run names anything still blank (t1, t2, …), fills empty input scenarios with 0, and opens the table. The Equations tab lists what the wires imply. Hide table puts the results away; Show table brings that same run back.</p>
+      <p class="hint" id="ineqHint">Place a block, then click the canvas. Click a placed block or a wire to name it. Click a selected block again to deselect it.<br/>A wire on an Input or Output keeps that block’s name, and renaming either one updates the other. Run names anything still blank (t1, t2, …), fills empty input scenarios with 0, and opens the table. The Equations tab lists what the wires imply. Hide table puts the results away; Show table brings that same run back.</p>
       <div id="ineqPanel">
         <div id="ineqIdle">
           <label>Scenarios
@@ -1460,14 +1460,20 @@
       if (port) {
         const same = port.nodeId === wireFrom.nodeId && port.port === wireFrom.port;
         if (!same) {
-          wires.push({
+          const madeWire = {
             id: `w${seq++}`,
             from: wireFrom.nodeId,
             fromPort: wireFrom.port,
             to: port.nodeId,
             toPort: port.port,
-            points: wireFrom.points.slice()
-          });
+            points: wireFrom.points.slice(),
+            label: ""
+          };
+          wires.push(madeWire);
+          if (appMode === "inequalities") {
+            const namedEnd = endpointBlocks(madeWire).find((n) => ineqTrim(n));
+            if (namedEnd) shareName(namedEnd, namedEnd.label, /* @__PURE__ */ new Set());
+          }
           setStatus("Wired. Click Run.");
         } else {
           setStatus("Wire cancelled.");
@@ -2372,8 +2378,36 @@
   function ineqTrim(item) {
     return String(item && item.label || "").trim();
   }
+  function isIneqEndpoint(n) {
+    return !!n && (n.kind === "iqInput" || n.kind === "iqOutput");
+  }
+  function endpointBlocks(wire) {
+    return [wire.from, wire.to].map((id) => nodes.find((n) => n.id === id)).filter(isIneqEndpoint);
+  }
+  function shareName(node, name, seen) {
+    if (!node || seen.has(node.id)) return;
+    seen.add(node.id);
+    node.label = name;
+    for (const w of wires) {
+      if (w.from !== node.id && w.to !== node.id) continue;
+      w.label = name;
+      for (const other of endpointBlocks(w)) shareName(other, name, seen);
+    }
+  }
+  function harmonizeEndpointNames() {
+    for (const n of nodes) {
+      if (isIneqEndpoint(n) && ineqTrim(n)) shareName(n, n.label, /* @__PURE__ */ new Set());
+    }
+    for (const w of wires) {
+      if (!ineqTrim(w)) continue;
+      for (const end of endpointBlocks(w)) {
+        if (!ineqTrim(end)) shareName(end, w.label, /* @__PURE__ */ new Set());
+      }
+    }
+  }
   function assignTempNames() {
-    const used = new Set();
+    harmonizeEndpointNames();
+    const used = /* @__PURE__ */ new Set();
     for (const n of nodes) {
       const name = ineqTrim(n);
       if (name) used.add(name);
@@ -2384,18 +2418,21 @@
     }
     let i = 1;
     const given = [];
-    const targets = [
-      ...nodes.filter((n) => n.kind === "iqInput"),
-      ...nodes.filter((n) => n.kind === "iqOutput"),
-      ...wires
-    ];
-    for (const item of targets) {
-      if (ineqTrim(item)) continue;
+    const take = () => {
       while (used.has(`t${i}`)) i += 1;
-      item.label = `t${i}`;
-      used.add(item.label);
-      given.push(item.label);
+      const name = `t${i}`;
+      used.add(name);
+      given.push(name);
       i += 1;
+      return name;
+    };
+    for (const n of nodes) {
+      if (!isIneqEndpoint(n) || ineqTrim(n)) continue;
+      shareName(n, take(), /* @__PURE__ */ new Set());
+    }
+    for (const w of wires) {
+      if (ineqTrim(w)) continue;
+      w.label = take();
     }
     return given;
   }
@@ -2450,6 +2487,7 @@
     document.getElementById("ineqEquations").hidden = tableOn;
     document.getElementById("btnIneqTabTable").className = tableOn ? "primary" : "";
     document.getElementById("btnIneqTabEq").className = tableOn ? "" : "primary";
+    resize();
   }
   function moveIneqColumn(key, dir) {
     if (!ineqResult) return;
@@ -2688,7 +2726,11 @@
     const wire = wires.find((w) => w.id === selectedWireId);
     const target = node || wire;
     if (!target) return;
-    target.label = document.getElementById("ineqName").value;
+    const value = document.getElementById("ineqName").value;
+    if (node && isIneqEndpoint(node)) shareName(node, value, /* @__PURE__ */ new Set());
+    else if (wire && endpointBlocks(wire).length) {
+      for (const end of endpointBlocks(wire)) shareName(end, value, /* @__PURE__ */ new Set());
+    } else target.label = value;
     draw();
   });
   document.getElementById("btnHideIneq").onclick = () => {
