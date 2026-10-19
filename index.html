@@ -72,15 +72,21 @@
   body.ineq #btnXl,
   body.ineq #btnSave,
   body.ineq #btnUpload,
-  body.ineq #btnRun,
   body.ineq #btnShowTable,
   body.ineq #btnPrevSol,
   body.ineq #btnNextSol,
   body.ineq #gearControls,
   body.ineq #gearHint,
   body.ineq #truthWrap { display: none !important; }
-  #ineqHint { display: none; }
-  body.ineq #ineqHint { display: block; }
+  #ineqHint, #ineqPanel { display: none; }
+  body.ineq #ineqHint, body.ineq #ineqPanel { display: block; }
+  #ineqWrap { position: relative; z-index: 2; max-height: 38vh; overflow: auto; padding: 8px 14px 14px; background: var(--paper); border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); }
+  #ineqBar { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+  #ineqBar button { height: 26px; }
+  #ineqTable { border-collapse: collapse; font-size: 13px; }
+  #ineqTable th, #ineqTable td { border: 1px solid #9aafbf; padding: 4px 8px; white-space: nowrap; }
+  #ineqTable th { background: #e7eef3; text-align: left; }
+  #ineqTable input { width: 88px; height: 26px; margin: 0; }
 </style>
 </head>
 <body>
@@ -137,12 +143,31 @@
         </div>
       </div>
       <p class="hint" id="gearHint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.<br/>Theoretical solves the speeds directly. Mechanical spins the inputs up through springs, inertia, and ratchet friction, and the table adds torque.<br/>Save writes a JSON file of this diagram, the scenario lists, and the results. Upload reads one back.</p>
-      <p class="hint" id="ineqHint">Place: click a block, then the canvas (click it again to cancel).<br/>Wire: click a dot, click the canvas for corners, then click another dot.<br/>Input connects on the right. ≤ and ≥ connect on the left and the right. + and − have two dots on the left and one on the right.</p>
+      <p class="hint" id="ineqHint">Place a block, then click the canvas. Click a placed block or a wire to edit it here. Nothing is calculated yet: Run only opens the table.</p>
+      <div id="ineqPanel">
+        <div id="ineqIdle">
+          <label>Scenarios
+            <select id="ineqCount">
+              <option>1</option><option>2</option><option>3</option><option>4</option>
+              <option>5</option><option>6</option><option>7</option><option>8</option>
+              <option>9</option><option>10</option><option>11</option><option>12</option>
+              <option>13</option><option>14</option><option>15</option><option>16</option>
+            </select>
+          </label>
+        </div>
+        <div id="ineqEdit" hidden>
+          <label>Name<input id="ineqName" type="text" placeholder="Name on the diagram"></label>
+          <div id="ineqValues"></div>
+        </div>
+      </div>
     </aside>
     <div id="splitter" title="Drag to resize the panel"><span id="showSide">Show panel</span></div>
     <div id="stage"><canvas id="c"></canvas></div>
   </main>
-  <section id="truthWrap" hidden>
+  <section id="ineqWrap" hidden>
+    <div id="ineqBar"><button type="button" id="btnHideIneq">Hide table</button></div>
+    <div id="ineqScroll"><table id="ineqTable"></table></div>
+  </section>
     <div id="truthBar"><button type="button" id="btnHideTable">Hide table</button></div>
     <div id="truthChecks"></div>
     <div id="truthScroll"><table id="truth"></table></div>
@@ -756,6 +781,7 @@
     ],
     input: [{ id: "io", label: "" }],
     iqInput: [{ id: "io", label: "" }],
+    iqOutput: [{ id: "io", label: "" }],
     plus: [
       { id: "a", label: "" },
       { id: "b", label: "" },
@@ -783,6 +809,7 @@
     inverter: { in: "bottom", out: "top" },
     input: { io: "top" },
     iqInput: { io: "right" },
+    iqOutput: { io: "left" },
     plus: { a: "left", b: "left", out: "right" },
     minus: { a: "left", b: "left", out: "right" },
     leq: { left: "left", right: "right" },
@@ -893,11 +920,14 @@
     { kind: "plus", title: "+" },
     { kind: "minus", title: "\u2212" },
     { kind: "leq", title: "\u2264" },
-    { kind: "geq", title: "\u2265" }
+    { kind: "geq", title: "\u2265" },
+    { kind: "iqOutput", title: "Output" }
   ];
   var appMode = "gears";
   var gearSnap = null;
   var ineqSnap = null;
+  var ineqCount = 4;
+  var ineqCells = {};
   var nodes = [];
   var wires = [];
   var armed = null;
@@ -956,6 +986,7 @@
     const item = items.find((entry) => entry.kind === kind);
     if (item) return item.title;
     if (kind === "iqInput" || kind === "input") return "Input";
+    if (kind === "iqOutput") return "Output";
     if (kind === "plus") return "+";
     if (kind === "minus") return "\u2212";
     if (kind === "leq") return "\u2264";
@@ -965,6 +996,7 @@
   function blockTitle(n) {
     if (n.label && n.kind !== "plus" && n.kind !== "minus" && n.kind !== "leq" && n.kind !== "geq") return n.label;
     if (n.kind === "input" || n.kind === "iqInput") return n.label || "Input";
+    if (n.kind === "iqOutput") return n.label || "Output";
     if (n.kind === "plus") return "+";
     if (n.kind === "minus") return "\u2212";
     if (n.kind === "leq") return "\u2264";
@@ -988,7 +1020,7 @@
     draw();
   }
   function nodeW(n) {
-    if (n.kind === "iqInput") return 108;
+    if (n.kind === "iqInput" || n.kind === "iqOutput") return 108;
     if (n.kind === "leq" || n.kind === "geq") return 84;
     if (n.kind === "plus" || n.kind === "minus") return 120;
     return n.kind === "input" ? 96 : 220;
@@ -997,7 +1029,7 @@
     return PORT_EDGE[kind][portId];
   }
   function nodeH(n) {
-    if (n.kind === "leq" || n.kind === "geq" || n.kind === "iqInput") return 64;
+    if (n.kind === "leq" || n.kind === "geq" || n.kind === "iqInput" || n.kind === "iqOutput") return 64;
     if (n.kind === "plus" || n.kind === "minus") return 88;
     const edges = new Set(BLOCK_PORTS[n.kind].map((p) => portEdge(n.kind, p.id)));
     return edges.has("top") && edges.has("bottom") ? 96 : 56;
@@ -1052,6 +1084,7 @@
       nodePanel.hidden = true;
       inputPanel.hidden = true;
       portPanel.hidden = true;
+      syncIneqPanel();
       return;
     }
     const selected = nodes.find((n) => n.id === selectedId);
@@ -1176,6 +1209,19 @@
       ctx.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
       ctx.stroke();
+      if (e.label && String(e.label).trim() && appMode === "inequalities") {
+        const at = wireLabelPoint(pts);
+        const name = String(e.label).trim();
+        ctx.font = "12px system-ui,sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const tw = ctx.measureText(name).width;
+        ctx.fillStyle = "#eef3f7";
+        ctx.fillRect(at.x - tw / 2 - 4, at.y - 8, tw + 8, 16);
+        ctx.fillStyle = "#14202b";
+        ctx.fillText(name, at.x, at.y);
+        ctx.textBaseline = "alphabetic";
+      }
       const corners = e.points || [];
       for (let i = 0; i < corners.length; i++) {
         const hot = selectedCorner && selectedCorner.id === e.id && selectedCorner.index === i;
@@ -1221,11 +1267,18 @@
       if (symbol) title = blockTitle(n);
       else if (n.label) title = n.label;
       else if (n.kind === "input" || n.kind === "iqInput") title = "Input";
+      else if (n.kind === "iqOutput") title = "Output";
       else if (n.kind === "oneWay") title = "1WM";
       else if (n.kind === "inverter") title = "Inverter";
       else title = n.kind.toUpperCase();
       ctx.font = symbol ? "600 28px system-ui,sans-serif" : "600 14px system-ui,sans-serif";
       ctx.fillText(title, n.x + ww / 2, n.y + hh / 2 + (symbol ? 10 : 5));
+      if (symbol && n.label && String(n.label).trim()) {
+        ctx.textAlign = "right";
+        ctx.font = "12px system-ui,sans-serif";
+        ctx.fillStyle = "#14202b";
+        ctx.fillText(String(n.label).trim(), n.x + ww - 8, n.y + hh - 8);
+      }
       for (const p of BLOCK_PORTS[n.kind]) {
         const pos = portPos(n, p.id);
         const rpmText = n.kind !== "input" && ((_b = n.results) == null ? void 0 : _b[p.id]) !== void 0 ? `${n.results[p.id]} rpm` : "";
@@ -1288,6 +1341,28 @@
     ctx.arcTo(x, y + h, x, y, r);
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
+  }
+  function wireLabelPoint(pts) {
+    if (pts.length < 2) return pts[0];
+    let total = 0;
+    const lens = [];
+    for (let i = 1; i < pts.length; i++) {
+      const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+      lens.push(d);
+      total += d;
+    }
+    let remain = total / 2;
+    for (let i = 1; i < pts.length; i++) {
+      if (lens[i - 1] >= remain) {
+        const t = lens[i - 1] ? remain / lens[i - 1] : 0;
+        return {
+          x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * t,
+          y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * t
+        };
+      }
+      remain -= lens[i - 1];
+    }
+    return pts[pts.length - 1];
   }
   function wirePoints(e) {
     const a = nodes.find((n) => n.id === e.from);
@@ -1414,7 +1489,8 @@
       selectedWireId = wire.id;
       selectedCorner = null;
       selectedId = null;
-      setStatus("Wire selected \u2014 press Delete to remove it.");
+      setStatus("Wire selected. Name it in the sidebar, or press Delete to remove it.");
+      syncRpmPanel();
       draw();
       return;
     }
@@ -1440,6 +1516,7 @@
         x: p.x - nodeW({ kind: armed.kind }) / 2,
         y: p.y - 20
       };
+      if (armed.kind === "iqInput") made.values = Array(ineqCount).fill("");
       if (armed.kind === "input") {
         made.shape = "zeros";
         made.series = fillSeries("zeros", scenarioCount);
@@ -1566,10 +1643,11 @@
     selectedWireId = null;
     wireFrom = null;
     if (appMode === "inequalities") {
+      document.getElementById("ineqWrap").hidden = true;
       setStatus("Cleared. Click a block, then the canvas.");
       renderPalette();
       syncRpmPanel();
-      draw();
+      resize();
       return;
     }
     setStatus("Cleared. Click a block, then click the canvas.");
@@ -2092,7 +2170,10 @@
     if (scenarioRows.length) renderTruth();
   }
   function run() {
-    if (appMode === "inequalities") return;
+    if (appMode === "inequalities") {
+      renderIneqTable();
+      return;
+    }
     for (const n of nodes) ensureSeries(n);
     scenarioRows = [];
     for (let i = 0; i < scenarioCount; i++) scenarioRows.push(solveScenario(i));
@@ -2253,6 +2334,102 @@
     draw();
     setStatus("Loaded configuration.");
   }
+  function ensureIneqValues(n) {
+    const next = Array.isArray(n.values) ? n.values.slice(0, ineqCount) : [];
+    while (next.length < ineqCount) next.push("");
+    n.values = next.map((v) => v == null ? "" : String(v));
+  }
+  function ineqColumns() {
+    const cols = [];
+    for (const n of nodes) {
+      if (n.kind === "iqInput" && String(n.label || "").trim()) cols.push({ key: n.id, head: String(n.label).trim() });
+    }
+    for (const w of wires) {
+      if (String(w.label || "").trim()) cols.push({ key: w.id, head: String(w.label).trim() });
+    }
+    for (const n of nodes) {
+      if (n.kind === "iqOutput" && String(n.label || "").trim()) cols.push({ key: n.id, head: String(n.label).trim() });
+    }
+    return cols;
+  }
+  function renderIneqTable() {
+    const wrap = document.getElementById("ineqWrap");
+    const table = document.getElementById("ineqTable");
+    wrap.hidden = false;
+    const cols = ineqColumns();
+    table.innerHTML = "";
+    const thead = document.createElement("thead");
+    const hr = document.createElement("tr");
+    const corner = document.createElement("th");
+    corner.textContent = "Scenario";
+    hr.appendChild(corner);
+    if (!cols.length) {
+      const th = document.createElement("th");
+      th.textContent = "Name an input, a wire, or an output";
+      hr.appendChild(th);
+    }
+    for (const col of cols) {
+      const th = document.createElement("th");
+      th.textContent = col.head;
+      hr.appendChild(th);
+    }
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    for (let i = 0; i < ineqCount; i++) {
+      const tr = document.createElement("tr");
+      const th = document.createElement("td");
+      th.textContent = String(i + 1);
+      tr.appendChild(th);
+      if (!cols.length) tr.appendChild(document.createElement("td"));
+      for (const col of cols) {
+        const td = document.createElement("td");
+        const field = document.createElement("input");
+        field.type = "text";
+        const key = `${col.key}:${i}`;
+        field.value = ineqCells[key] || "";
+        field.addEventListener("input", () => {
+          ineqCells[key] = field.value;
+        });
+        td.appendChild(field);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    resize();
+  }
+  function syncIneqPanel() {
+    const idle = document.getElementById("ineqIdle");
+    const edit = document.getElementById("ineqEdit");
+    const countSel = document.getElementById("ineqCount");
+    if (countSel && document.activeElement !== countSel) countSel.value = String(ineqCount);
+    const node = nodes.find((n) => n.id === selectedId);
+    const wire = wires.find((w) => w.id === selectedWireId);
+    const target = node || wire;
+    idle.hidden = !!target;
+    edit.hidden = !target;
+    const values = document.getElementById("ineqValues");
+    values.innerHTML = "";
+    if (!target) return;
+    const name = document.getElementById("ineqName");
+    if (document.activeElement !== name) name.value = target.label || "";
+    if (!(node && node.kind === "iqInput")) return;
+    ensureIneqValues(node);
+    node.values.forEach((value, i) => {
+      const label = document.createElement("label");
+      label.textContent = `Scenario ${i + 1}`;
+      const field = document.createElement("input");
+      field.type = "number";
+      field.step = "any";
+      field.value = value;
+      field.addEventListener("input", () => {
+        node.values[i] = field.value;
+      });
+      label.appendChild(field);
+      values.appendChild(label);
+    });
+  }
   function takeSnap() {
     return { nodes, wires, panX, panY, zoom, seq };
   }
@@ -2281,6 +2458,7 @@
     document.getElementById("btnIneq").className = mode === "inequalities" ? "primary" : "";
     document.querySelector(".sub").textContent = mode === "inequalities" ? "Inequalities \u00b7 place a block, then wire the dots" : "Local file \u00b7 click any port, click corners, click another port \u2192 Run";
     if (mode === "inequalities") document.getElementById("truthWrap").hidden = true;
+    if (mode === "gears") document.getElementById("ineqWrap").hidden = true;
     renderPalette();
     syncRpmPanel();
     if (mode === "gears" && scenarioRows.length) renderTruth();
@@ -2289,6 +2467,26 @@
   }
   document.getElementById("btnGears").onclick = () => setAppMode("gears");
   document.getElementById("btnIneq").onclick = () => setAppMode("inequalities");
+  document.getElementById("ineqCount").value = String(ineqCount);
+  document.getElementById("ineqCount").addEventListener("change", () => {
+    const v = Math.round(Number(document.getElementById("ineqCount").value));
+    ineqCount = Math.min(16, Math.max(1, Number.isFinite(v) ? v : 1));
+    document.getElementById("ineqCount").value = String(ineqCount);
+    for (const n of nodes) if (n.kind === "iqInput") ensureIneqValues(n);
+    if (!document.getElementById("ineqWrap").hidden) renderIneqTable();
+  });
+  document.getElementById("ineqName").addEventListener("input", () => {
+    const node = nodes.find((n) => n.id === selectedId);
+    const wire = wires.find((w) => w.id === selectedWireId);
+    const target = node || wire;
+    if (!target) return;
+    target.label = document.getElementById("ineqName").value;
+    draw();
+  });
+  document.getElementById("btnHideIneq").onclick = () => {
+    document.getElementById("ineqWrap").hidden = true;
+    resize();
+  };
   document.getElementById("btnXl").onclick = loadXl;
   document.getElementById("btnClear").onclick = clearAll;
   document.getElementById("btnSave").onclick = saveFile;
