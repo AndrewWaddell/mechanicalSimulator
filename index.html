@@ -217,7 +217,7 @@
       <button type="button" id="btnSearchAddCol">Add variable</button>
       <button type="button" id="btnSearchAddRow">Add scenario</button>
     </div>
-    <p class="hint">This does not use the diagram. Columns are variables and rows are scenarios. Given is a number the equations can use. Required is a number they have to force exactly, so that cell comes out as = that value. Search tries shorter lists first and stops at the first one that works.</p>
+    <p class="hint">This does not use the diagram. Columns are variables and rows are scenarios. Given is a number the equations can use. Required is a number they have to force exactly, so that cell comes out as = that value. Search tries shorter lists first. When those columns are not enough, it adds variables such as t1 and stops at the first list that works.</p>
     <progress id="searchProgress" value="0" max="1"></progress>
     <div id="searchMeta">Idle</div>
     <div><table id="searchTable"></table></div>
@@ -3354,8 +3354,11 @@
   }
   function paintSearch(tried, total, message) {
     const bar = document.getElementById("searchProgress");
-    bar.max = Math.max(1, total);
-    bar.value = Math.min(tried, bar.max);
+    if (total == null) bar.removeAttribute("value");
+    else {
+      bar.max = Math.max(1, total);
+      bar.value = Math.min(tried, bar.max);
+    }
     document.getElementById("searchMeta").textContent = message;
   }
   function showSearchLines(lines) {
@@ -3436,6 +3439,123 @@
     }
     return true;
   }
+  function searchCombine(op, left, right) {
+    return left.map((value, i) => {
+      if (value == null || right[i] == null) return null;
+      return op === "add" ? value + right[i] : value - right[i];
+    });
+  }
+  function searchSameVector(left, right) {
+    for (let i = 0; i < left.length; i++) {
+      if (left[i] == null && right[i] == null) continue;
+      if (left[i] == null || right[i] == null || !searchNearly(left[i], right[i])) return false;
+    }
+    return true;
+  }
+  function searchVectorMatches(values, col, rows) {
+    let any = false;
+    for (let i = 0; i < rows.length; i++) {
+      const want = searchCell(rows[i], col);
+      if (want == null) continue;
+      any = true;
+      if (values[i] == null || !searchNearly(values[i], want)) return false;
+    }
+    return any;
+  }
+  function searchExpressions(signals) {
+    const exprs = [];
+    for (let i = 0; i < signals.length; i++) {
+      for (let j = i; j < signals.length; j++) {
+        exprs.push({
+          op: "add",
+          a: signals[i].name,
+          b: signals[j].name,
+          values: searchCombine("add", signals[i].values, signals[j].values)
+        });
+      }
+      for (let j = 0; j < signals.length; j++) {
+        exprs.push({
+          op: "sub",
+          a: signals[i].name,
+          b: signals[j].name,
+          values: searchCombine("sub", signals[i].values, signals[j].values)
+        });
+      }
+    }
+    return exprs;
+  }
+  function createHelperSearch(cols, rows) {
+    const required = cols.filter((col) => col.role === "required" && rows.some((row) => searchCell(row, col) != null));
+    const used = new Set(cols.map((col) => col.name));
+    const freshNames = [];
+    for (let n = 1; freshNames.length < 3; n++) {
+      const name = "t" + n;
+      if (!used.has(name)) freshNames.push(name);
+    }
+    const queue = [{
+      signals: cols.filter((col) => col.role === "given").map((col) => ({
+        name: col.name,
+        values: rows.map((row) => searchCell(row, col))
+      })),
+      pending: required,
+      freshUsed: 0,
+      eqs: []
+    }];
+    const seen = new Set();
+    let cursor = null;
+    const vectorKey = (values) => values.map((v) => v == null ? "_" : String(Math.round(v * 1e6))).join(",");
+    const stateKey = (state) => state.freshUsed + "|" + state.pending.map((col) => col.name).slice().sort().join(",") + "|" + state.signals.map((signal) => vectorKey(signal.values)).slice().sort().join(";");
+    return {
+      batch() {
+        const start = Date.now();
+        let local = 0;
+        while (Date.now() - start < 40) {
+          if (!cursor) {
+            if (!queue.length || seen.size > 20000) return { tried: local, found: null, done: true };
+            const state = queue.shift();
+            const key = stateKey(state);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            cursor = { state, exprs: searchExpressions(state.signals), ei: 0 };
+          }
+          const state = cursor.state;
+          while (cursor.ei < cursor.exprs.length) {
+            const expr = cursor.exprs[cursor.ei++];
+            local++;
+            if (expr.values.some((value) => value != null && !Number.isFinite(value))) continue;
+            let solved = null;
+            for (const col of state.pending) {
+              if (!searchVectorMatches(expr.values, col, rows)) continue;
+              const eqs = state.eqs.concat([{ op: expr.op, out: col.name, a: expr.a, b: expr.b }]);
+              if (state.pending.length === 1) solved = eqs;
+              else {
+                queue.push({
+                  signals: state.signals.concat([{ name: col.name, values: expr.values }]),
+                  pending: state.pending.filter((item) => item !== col),
+                  freshUsed: state.freshUsed,
+                  eqs
+                });
+              }
+            }
+            if (solved) return { tried: local, found: solved, done: false };
+            const novel = expr.values.some((value) => value != null) && !state.signals.some((signal) => searchSameVector(expr.values, signal.values));
+            const hitsRequired = state.pending.some((col) => searchVectorMatches(expr.values, col, rows));
+            if (!hitsRequired && novel && state.freshUsed < freshNames.length && queue.length < 20000) {
+              queue.push({
+                signals: state.signals.concat([{ name: freshNames[state.freshUsed], values: expr.values }]),
+                pending: state.pending,
+                freshUsed: state.freshUsed + 1,
+                eqs: state.eqs.concat([{ op: expr.op, out: freshNames[state.freshUsed], a: expr.a, b: expr.b }])
+              });
+            }
+            if (Date.now() - start >= 40) return { tried: local, found: null, done: false };
+          }
+          cursor = null;
+        }
+        return { tried: local, found: null, done: !cursor && !queue.length };
+      }
+    };
+  }
   async function runSearch() {
     if (searching) return;
     const cols = searchCols.map((col) => ({ id: col.id, name: col.name.trim(), role: col.role }));
@@ -3494,14 +3614,14 @@
       return ok && !searchAbort;
     };
     try {
-      paint(pool.length ? `Tried 0 of ${total}` : "No equations match the numbers in the table.");
-      if (!pool.length) return;
+      paint(pool.length ? `Tried 0 of ${total}` : "Tried 0. Searching with new variables\u2026");
       let found = null;
       const take = async (list) => {
         if (found || searchAbort) return;
         if (hits(list) && await confirm(list)) found = list;
         if (!found && !searchAbort && Date.now() - lastPaint >= 40) await touch(false);
       };
+      if (pool.length) {
       for (let i = 0; i < pool.length && !found && !searchAbort; i++) await take([pool[i]]);
       for (let i = 0; i < pool.length && !found && !searchAbort; i++) {
         for (let j = i + 1; j < pool.length && !found && !searchAbort; j++) await take([pool[i], pool[j]]);
@@ -3520,15 +3640,31 @@
           }
         }
       }
+      }
+      if (!found && !searchAbort) {
+        const helper = createHelperSearch(cols, rows);
+        let helperDone = false;
+        while (!found && !searchAbort && !helperDone) {
+          const batch = helper.batch();
+          tried += batch.tried;
+          if (batch.found) {
+            paintSearch(tried, null, "Checking a candidate\u2026");
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            if (!searchAbort && await z3PinsRequired(cols, rows, batch.found.map(searchLine))) found = batch.found;
+          } else if (batch.tried) paintSearch(tried, null, `Tried ${tried}, including new variables`);
+          if (!batch.found) await new Promise((resolve) => setTimeout(resolve, 0));
+          helperDone = batch.done;
+        }
+      }
       if (searchAbort) {
-        paintSearch(tried, total, `Stopped after ${tried} ${tried === 1 ? "try" : "tries"}`);
+        paintSearch(tried, tried || 1, `Stopped after ${tried} ${tried === 1 ? "try" : "tries"}`);
         return;
       }
       if (!found) {
-        paintSearch(total, total, `Tried ${total}. No list of up to ${depth4 ? 4 : 3} equations forced every required cell to equal the number you typed.`);
+        paintSearch(tried, tried || 1, `Tried ${tried}. No list forced every required cell to equal the number you typed, including lists that add variables such as t1.`);
         return;
       }
-      paintSearch(total, total, `Found after ${tried} ${tried === 1 ? "try" : "tries"}`);
+      paintSearch(tried, tried || 1, `Found after ${tried} ${tried === 1 ? "try" : "tries"}`);
       showSearchLines(found.map(searchLine));
     } catch (err) {
       paintSearch(tried, total, err && err.message ? err.message : "Search failed");
