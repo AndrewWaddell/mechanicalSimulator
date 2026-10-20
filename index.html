@@ -91,6 +91,30 @@
   #ineqTable th button { height: 18px; padding: 0 5px; font-size: 11px; }
   #ineqTable td { text-align: right; }
   #ineqEquations { margin: 4px 0 8px; font: 15px/1.7 Figtree, system-ui, sans-serif; white-space: pre-wrap; }
+  #searchWrap { display: none; }
+  #searchWrap[hidden] { display: none !important; }
+  body.search main,
+  body.search #ineqWrap,
+  body.search #truthWrap,
+  body.search #resultsRibbon,
+  body.search #btnXl,
+  body.search #btnClear,
+  body.search #btnSave,
+  body.search #btnUpload,
+  body.search #btnUnselect,
+  body.search #btnRun,
+  body.search #btnPrevSol,
+  body.search #btnNextSol { display: none !important; }
+  body.search #searchWrap { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: auto; padding: 16px 18px 28px; gap: 12px; }
+  #searchProgress { width: min(480px, 100%); height: 16px; }
+  #searchMeta { font-size: 13px; }
+  #searchTable { border-collapse: collapse; font-size: 13px; }
+  #searchTable th, #searchTable td { border: 1px solid #9aafbf; padding: 6px; vertical-align: top; background: var(--paper); }
+  #searchTable th { background: #e7eef3; }
+  #searchTable input, #searchTable select { width: 96px; height: 26px; margin: 0; }
+  #searchTable select.role { display: block; width: 112px; margin-top: 4px; }
+  #searchTable button { height: 22px; margin-top: 4px; padding: 0 8px; }
+  #searchEquations { font: 16px/1.7 Figtree, system-ui, sans-serif; }
 </style>
 </head>
 <body>
@@ -102,6 +126,7 @@
     <div class="row">
       <button type="button" id="btnGears" class="primary">Gears</button>
       <button type="button" id="btnIneq">Inequalities</button>
+      <button type="button" id="btnSearch">Search</button>
       <button type="button" id="btnXl">Load XL demo</button>
       <button type="button" id="btnClear">Clear</button>
       <button type="button" id="btnSave">Save</button>
@@ -185,6 +210,19 @@
     <div id="truthScroll"><table id="truth"></table></div>
   </section>
   <div id="resultsRibbon">Show table</div>
+  <section id="searchWrap" hidden>
+    <div class="row">
+      <button type="button" id="btnSearchGo" class="primary">Search</button>
+      <button type="button" id="btnSearchStop" disabled>Stop</button>
+      <button type="button" id="btnSearchAddCol">Add variable</button>
+      <button type="button" id="btnSearchAddRow">Add scenario</button>
+    </div>
+    <p class="hint">This does not use the diagram. Columns are variables and rows are scenarios. Given is a number the equations can use. Required is a number they have to force exactly, so that cell comes out as = that value. Search tries shorter lists first and stops at the first one that works.</p>
+    <progress id="searchProgress" value="0" max="1"></progress>
+    <div id="searchMeta">Idle</div>
+    <div><table id="searchTable"></table></div>
+    <div id="searchEquations"></div>
+  </section>
   <script>
 "use strict";
 (() => {
@@ -941,6 +979,18 @@
   var ineqCount = 4;
   var ineqResult = null;
   var ineqTab = "table";
+  var searchSeq = 10;
+  var searching = false;
+  var searchAbort = false;
+  var searchCols = [
+    { id: "c1", name: "A", role: "given" },
+    { id: "c2", name: "B", role: "given" },
+    { id: "c3", name: "C", role: "required" }
+  ];
+  var searchRows = [
+    { id: "r1", values: { c1: "", c2: "", c3: "" } },
+    { id: "r2", values: { c1: "", c2: "", c3: "" } }
+  ];
   var nodes = [];
   var wires = [];
   var armed = null;
@@ -3019,6 +3069,475 @@
       values.appendChild(label);
     });
   }
+  function searchNearly(a, b) {
+    return Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a), Math.abs(b));
+  }
+  function searchSolve(equations, n) {
+    const m = equations.length;
+    const A = equations.map((eq) => eq.coeff.slice());
+    const b = equations.map((eq) => eq.rhs);
+    const eps = 1e-8;
+    const where = Array(n).fill(-1);
+    let row = 0;
+    for (let col = 0; col < n && row < m; col++) {
+      let pivot = row;
+      for (let i = row + 1; i < m; i++) if (Math.abs(A[i][col]) > Math.abs(A[pivot][col])) pivot = i;
+      if (Math.abs(A[pivot][col]) < eps) continue;
+      [A[row], A[pivot]] = [A[pivot], A[row]];
+      [b[row], b[pivot]] = [b[pivot], b[row]];
+      const div = A[row][col];
+      for (let j = col; j < n; j++) A[row][j] /= div;
+      b[row] /= div;
+      for (let i = 0; i < m; i++) {
+        if (i === row) continue;
+        const factor = A[i][col];
+        if (Math.abs(factor) < eps) continue;
+        for (let j = col; j < n; j++) A[i][j] -= factor * A[row][j];
+        b[i] -= factor * b[row];
+      }
+      where[col] = row;
+      row++;
+    }
+    for (let i = 0; i < m; i++) {
+      let allZero = true;
+      for (let j = 0; j < n; j++) if (Math.abs(A[i][j]) > eps) allZero = false;
+      if (allZero && Math.abs(b[i]) > eps) return null;
+    }
+    const values = Array(n).fill(null);
+    for (let col = 0; col < n; col++) {
+      const r = where[col];
+      if (r < 0) continue;
+      let unique = true;
+      for (let j = 0; j < n; j++) if (j !== col && Math.abs(A[r][j]) > eps) unique = false;
+      if (unique) values[col] = b[r];
+    }
+    return values;
+  }
+  function searchComponents(n, edges) {
+    const adj = Array.from({ length: n }, () => []);
+    for (const [u, v] of edges) adj[u].push(v);
+    const index = Array(n).fill(-1);
+    const low = Array(n).fill(0);
+    const stack = [];
+    const on = Array(n).fill(false);
+    const comps = [];
+    let stamp = 0;
+    const dfs = (u) => {
+      index[u] = low[u] = stamp++;
+      stack.push(u);
+      on[u] = true;
+      for (const v of adj[u]) {
+        if (index[v] < 0) {
+          dfs(v);
+          low[u] = Math.min(low[u], low[v]);
+        } else if (on[v]) low[u] = Math.min(low[u], index[v]);
+      }
+      if (low[u] === index[u]) {
+        const comp = [];
+        let w;
+        do {
+          w = stack.pop();
+          on[w] = false;
+          comp.push(w);
+        } while (w !== u);
+        comps.push(comp);
+      }
+    };
+    for (let i = 0; i < n; i++) if (index[i] < 0) dfs(i);
+    return comps;
+  }
+  function searchCell(row, col) {
+    const raw = row.values[col.id];
+    if (raw == null || String(raw).trim() === "") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+  function searchAtomAgrees(atom, cols, rows) {
+    const byName = new Map(cols.map((col) => [col.name, col]));
+    let seen = 0;
+    for (const row of rows) {
+      const read = (name) => {
+        const col = byName.get(name);
+        return col ? searchCell(row, col) : null;
+      };
+      if (atom.op === "le") {
+        const a = read(atom.a);
+        const b = read(atom.b);
+        if (a == null || b == null) continue;
+        seen++;
+        if (a > b + 1e-8) return { ok: false, seen };
+      } else {
+        const out = read(atom.out);
+        const a = read(atom.a);
+        const b = read(atom.b);
+        if (out == null || a == null || b == null) continue;
+        seen++;
+        const expect = atom.op === "add" ? a + b : a - b;
+        if (!searchNearly(out, expect)) return { ok: false, seen };
+      }
+    }
+    return { ok: true, seen };
+  }
+  function searchBuildAtoms(cols, rows) {
+    const names = cols.map((col) => col.name);
+    const role = new Map(cols.map((col) => [col.name, col.role]));
+    const given = (name) => role.get(name) === "given";
+    const atoms = [];
+    const push = (atom) => {
+      const check = searchAtomAgrees(atom, cols, rows);
+      if (!check.ok || check.seen === 0) return;
+      let score = check.seen;
+      if (atom.op === "le") score += 1;
+      else {
+        score += 1000;
+        if (role.get(atom.out) === "required") score += 200;
+        if (atom.out !== atom.a && atom.out !== atom.b) score += 80;
+        if (given(atom.a) || given(atom.b)) score += 40;
+      }
+      atoms.push({ ...atom, score });
+    };
+    for (const out of names) {
+      for (let i = 0; i < names.length; i++) {
+        for (let j = i; j < names.length; j++) push({ op: "add", out, a: names[i], b: names[j] });
+        for (const b of names) push({ op: "sub", out, a: names[i], b });
+      }
+    }
+    for (const a of names) for (const b of names) if (a !== b) push({ op: "le", a, b });
+    atoms.sort((p, q) => q.score - p.score || p.op.localeCompare(q.op));
+    const eqs = atoms.filter((atom) => atom.op !== "le").slice(0, 48);
+    const ineq = atoms.filter((atom) => atom.op === "le").slice(0, 16);
+    return eqs.concat(ineq);
+  }
+  function searchForces(atoms, cols, rows) {
+    const names = cols.map((col) => col.name);
+    const index = new Map(names.map((name, i) => [name, i]));
+    const n = names.length;
+    for (const row of rows) {
+      const equations = [];
+      const addEq = (coeff, rhs) => equations.push({ coeff, rhs });
+      for (const atom of atoms) {
+        if (atom.op === "le") continue;
+        const coeff = Array(n).fill(0);
+        coeff[index.get(atom.out)] += 1;
+        coeff[index.get(atom.a)] -= 1;
+        if (atom.op === "add") coeff[index.get(atom.b)] -= 1;
+        else coeff[index.get(atom.b)] += 1;
+        addEq(coeff, 0);
+      }
+      const edges = [];
+      for (const atom of atoms) {
+        if (atom.op !== "le") continue;
+        edges.push([index.get(atom.a), index.get(atom.b)]);
+      }
+      for (const comp of searchComponents(n, edges)) {
+        if (comp.length < 2) continue;
+        for (let k = 1; k < comp.length; k++) {
+          const coeff = Array(n).fill(0);
+          coeff[comp[0]] = 1;
+          coeff[comp[k]] = -1;
+          addEq(coeff, 0);
+        }
+      }
+      for (const col of cols) {
+        if (col.role !== "given") continue;
+        const value = searchCell(row, col);
+        if (value == null) continue;
+        const coeff = Array(n).fill(0);
+        coeff[index.get(col.name)] = 1;
+        addEq(coeff, value);
+      }
+      const solved = searchSolve(equations, n);
+      if (!solved) return false;
+      for (const col of cols) {
+        if (col.role !== "required") continue;
+        const want = searchCell(row, col);
+        if (want == null) continue;
+        const got = solved[index.get(col.name)];
+        if (got == null || !searchNearly(got, want)) return false;
+      }
+      for (const atom of atoms) {
+        if (atom.op !== "le") continue;
+        const a = solved[index.get(atom.a)];
+        const b = solved[index.get(atom.b)];
+        if (a != null && b != null && a > b + 1e-6) return false;
+      }
+    }
+    return true;
+  }
+  function searchLine(atom) {
+    if (atom.op === "add") return `${atom.out} = ${atom.a} + ${atom.b}`;
+    if (atom.op === "sub") return `${atom.out} = ${atom.a} \u2212 ${atom.b}`;
+    return `${atom.a} \u2264 ${atom.b}`;
+  }
+  function searchComboCount(n, k) {
+    if (k > n || k < 0) return 0;
+    let result = 1;
+    for (let i = 0; i < k; i++) result = result * (n - i) / (i + 1);
+    return Math.round(result);
+  }
+  function renderSearchTable() {
+    const table = document.getElementById("searchTable");
+    table.innerHTML = "";
+    const thead = document.createElement("thead");
+    const hr = document.createElement("tr");
+    const corner = document.createElement("th");
+    corner.textContent = "Scenario";
+    hr.appendChild(corner);
+    for (const col of searchCols) {
+      const th = document.createElement("th");
+      const name = document.createElement("input");
+      name.type = "text";
+      name.value = col.name;
+      name.setAttribute("aria-label", "Variable name");
+      name.addEventListener("input", () => { col.name = name.value; });
+      const role = document.createElement("select");
+      role.className = "role";
+      for (const [value, label] of [["given", "Given"], ["required", "Required"]]) {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = label;
+        role.appendChild(opt);
+      }
+      role.value = col.role;
+      role.setAttribute("aria-label", "Column kind");
+      role.addEventListener("change", () => { col.role = role.value; });
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", () => {
+        if (searchCols.length < 2) return;
+        searchCols = searchCols.filter((item) => item.id !== col.id);
+        renderSearchTable();
+      });
+      th.append(name, role, remove);
+      hr.appendChild(th);
+    }
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    searchRows.forEach((row, index) => {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      const label = document.createElement("div");
+      label.textContent = String(index + 1);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", () => {
+        if (searchRows.length < 2) return;
+        searchRows = searchRows.filter((item) => item.id !== row.id);
+        renderSearchTable();
+      });
+      td.append(label, remove);
+      tr.appendChild(td);
+      for (const col of searchCols) {
+        const cell = document.createElement("td");
+        const field = document.createElement("input");
+        field.type = "number";
+        field.step = "any";
+        field.value = row.values[col.id] == null ? "" : row.values[col.id];
+        field.setAttribute("aria-label", `Scenario ${index + 1} ${col.name}`);
+        field.addEventListener("input", () => { row.values[col.id] = field.value; });
+        cell.appendChild(field);
+        tr.appendChild(cell);
+      }
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+  }
+  function setSearchBusy(busy) {
+    document.getElementById("btnSearchGo").disabled = busy;
+    document.getElementById("btnSearchStop").disabled = !busy;
+    document.getElementById("btnSearchAddCol").disabled = busy;
+    document.getElementById("btnSearchAddRow").disabled = busy;
+    document.querySelectorAll("#searchTable input, #searchTable select, #searchTable button").forEach((el) => { el.disabled = busy; });
+  }
+  function paintSearch(tried, total, message) {
+    const bar = document.getElementById("searchProgress");
+    bar.max = Math.max(1, total);
+    bar.value = Math.min(tried, bar.max);
+    document.getElementById("searchMeta").textContent = message;
+  }
+  function showSearchLines(lines) {
+    const box = document.getElementById("searchEquations");
+    box.innerHTML = "";
+    for (const line of lines) {
+      const row = document.createElement("div");
+      row.textContent = line;
+      box.appendChild(row);
+    }
+  }
+  async function z3PinsRequired(cols, rows, lines) {
+    const api = await loadZ3();
+    const { Context, Z3 } = api;
+    if (!loadZ3.ineq) loadZ3.ineq = Context("ineq");
+    const { Optimize, Real } = loadZ3.ineq;
+    const vars = /* @__PURE__ */ new Map();
+    const variable = (name) => {
+      if (!vars.has(name)) vars.set(name, Real.const("s" + vars.size));
+      return vars.get(name);
+    };
+    const base = [];
+    for (const line of lines) {
+      const parsed = parseIneqEquation(line);
+      if (!parsed) return false;
+      const [out, a, b] = parsed.names.map(variable);
+      if (parsed.op === "add") base.push(out.eq(a.add(b)));
+      else if (parsed.op === "sub") base.push(out.eq(a.sub(b)));
+      else if (parsed.op === "le") base.push(out.le(a));
+      else base.push(out.ge(a));
+    }
+    const readBound = (opt) => {
+      const lower = Z3.ast_to_string(opt.ctx.ptr, Z3.optimize_get_lower(opt.ctx.ptr, opt.ptr, 0));
+      const upper = Z3.ast_to_string(opt.ctx.ptr, Z3.optimize_get_upper(opt.ctx.ptr, opt.ptr, 0));
+      return objectiveValue(lower, upper);
+    };
+    const release = (opt) => { try { opt.release(); } catch (err) { /* already released */ } };
+    for (const row of rows) {
+      const known = [];
+      for (const col of cols) {
+        if (col.role !== "given") continue;
+        const value = searchCell(row, col);
+        if (value == null) continue;
+        const expr = decimalReal(Real, String(row.values[col.id]).trim());
+        if (!expr) return false;
+        known.push(variable(col.name).eq(expr));
+      }
+      const assertAll = (opt) => {
+        for (const expr of base) opt.add(expr);
+        for (const expr of known) opt.add(expr);
+      };
+      const probe = new Optimize();
+      assertAll(probe);
+      const status = await probe.check();
+      release(probe);
+      if (status !== "sat") return false;
+      for (const col of cols) {
+        if (col.role !== "required") continue;
+        const want = searchCell(row, col);
+        if (want == null) continue;
+        const expr = variable(col.name);
+        const minOpt = new Optimize();
+        assertAll(minOpt);
+        minOpt.minimize(expr);
+        const minStatus = await minOpt.check();
+        const minV = minStatus === "sat" ? readBound(minOpt) : { text: "no" };
+        release(minOpt);
+        const maxOpt = new Optimize();
+        assertAll(maxOpt);
+        maxOpt.maximize(expr);
+        const maxStatus = await maxOpt.check();
+        const maxV = maxStatus === "sat" ? readBound(maxOpt) : { text: "no" };
+        release(maxOpt);
+        const text = formatZ3Cell(minV, maxV);
+        if (!text.startsWith("=")) return false;
+        if (!searchNearly(Number(text.slice(1)), want)) return false;
+      }
+    }
+    return true;
+  }
+  async function runSearch() {
+    if (searching) return;
+    const cols = searchCols.map((col) => ({ id: col.id, name: col.name.trim(), role: col.role }));
+    const rows = searchRows.map((row) => ({ id: row.id, values: { ...row.values } }));
+    const names = cols.map((col) => col.name);
+    const meta = document.getElementById("searchMeta");
+    if (names.some((name) => !name) || new Set(names).size !== names.length) {
+      meta.textContent = "Each variable needs its own name.";
+      return;
+    }
+    if (names.some((name) => /[=+\u2212\u2264\u2265?]|\s-\s/.test(name) || name.includes(" - "))) {
+      meta.textContent = "Names cannot contain =, +, -, \u2212, \u2264, or \u2265.";
+      return;
+    }
+    const requiredFilled = cols.some((col) => col.role === "required" && rows.some((row) => searchCell(row, col) != null));
+    if (!requiredFilled) {
+      meta.textContent = "Type a number in a Required column. That is the value the equations have to hit exactly.";
+      return;
+    }
+    for (const row of rows) {
+      for (const col of cols) {
+        const raw = row.values[col.id];
+        if (raw == null || String(raw).trim() === "") continue;
+        if (searchCell(row, col) == null) {
+          meta.textContent = "Scenario cells need to be numbers, or left blank.";
+          return;
+        }
+      }
+    }
+    const pool = searchBuildAtoms(cols, rows);
+    const depth4 = pool.length <= 22;
+    const total = pool.length + searchComboCount(pool.length, 2) + searchComboCount(pool.length, 3) + (depth4 ? searchComboCount(pool.length, 4) : 0);
+    searching = true;
+    searchAbort = false;
+    setSearchBusy(true);
+    showSearchLines([]);
+    let tried = 0;
+    let lastPaint = 0;
+    const paint = (message) => paintSearch(tried, total, message);
+    const touch = async (force) => {
+      const now = Date.now();
+      if (!force && now - lastPaint < 40) return;
+      lastPaint = now;
+      paint(`Tried ${tried} of ${total}`);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    const hits = (list) => {
+      tried++;
+      return searchForces(list, cols, rows);
+    };
+    const confirm = async (list) => {
+      await touch(true);
+      if (searchAbort) return false;
+      paint("Checking a candidate\u2026");
+      const ok = await z3PinsRequired(cols, rows, list.map(searchLine));
+      return ok && !searchAbort;
+    };
+    try {
+      paint(pool.length ? `Tried 0 of ${total}` : "No equations match the numbers in the table.");
+      if (!pool.length) return;
+      let found = null;
+      const take = async (list) => {
+        if (found || searchAbort) return;
+        if (hits(list) && await confirm(list)) found = list;
+        if (!found && !searchAbort && Date.now() - lastPaint >= 40) await touch(false);
+      };
+      for (let i = 0; i < pool.length && !found && !searchAbort; i++) await take([pool[i]]);
+      for (let i = 0; i < pool.length && !found && !searchAbort; i++) {
+        for (let j = i + 1; j < pool.length && !found && !searchAbort; j++) await take([pool[i], pool[j]]);
+      }
+      for (let i = 0; i < pool.length && !found && !searchAbort; i++) {
+        for (let j = i + 1; j < pool.length && !found && !searchAbort; j++) {
+          for (let k = j + 1; k < pool.length && !found && !searchAbort; k++) await take([pool[i], pool[j], pool[k]]);
+        }
+      }
+      if (depth4) {
+        for (let i = 0; i < pool.length && !found && !searchAbort; i++) {
+          for (let j = i + 1; j < pool.length && !found && !searchAbort; j++) {
+            for (let k = j + 1; k < pool.length && !found && !searchAbort; k++) {
+              for (let n = k + 1; n < pool.length && !found && !searchAbort; n++) await take([pool[i], pool[j], pool[k], pool[n]]);
+            }
+          }
+        }
+      }
+      if (searchAbort) {
+        paintSearch(tried, total, `Stopped after ${tried} ${tried === 1 ? "try" : "tries"}`);
+        return;
+      }
+      if (!found) {
+        paintSearch(total, total, `Tried ${total}. No list of up to ${depth4 ? 4 : 3} equations forced every required cell to equal the number you typed.`);
+        return;
+      }
+      paintSearch(total, total, `Found after ${tried} ${tried === 1 ? "try" : "tries"}`);
+      showSearchLines(found.map(searchLine));
+    } catch (err) {
+      paintSearch(tried, total, err && err.message ? err.message : "Search failed");
+    } finally {
+      searching = false;
+      searchAbort = false;
+      setSearchBusy(false);
+    }
+  }
   function takeSnap() {
     return { nodes, wires, panX, panY, zoom, seq };
   }
@@ -3032,20 +3551,39 @@
   }
   function setAppMode(mode) {
     if (mode === appMode) return;
-    const snap = takeSnap();
-    if (appMode === "gears") gearSnap = snap;
-    else ineqSnap = snap;
+    if (searching) searchAbort = true;
+    if (appMode === "gears" || appMode === "inequalities") {
+      const snap = takeSnap();
+      if (appMode === "gears") gearSnap = snap;
+      else ineqSnap = snap;
+    }
     appMode = mode;
-    putSnap(mode === "gears" ? gearSnap : ineqSnap || { nodes: [], wires: [], panX: 0, panY: 0, zoom: 1, seq: 1 });
+    if (mode === "gears" || mode === "inequalities") {
+      putSnap(mode === "gears" ? gearSnap : ineqSnap || { nodes: [], wires: [], panX: 0, panY: 0, zoom: 1, seq: 1 });
+    }
     armed = null;
     selectedId = null;
     selectedWireId = null;
     selectedCorner = null;
     wireFrom = null;
     document.body.classList.toggle("ineq", mode === "inequalities");
+    document.body.classList.toggle("search", mode === "search");
     document.getElementById("btnGears").className = mode === "gears" ? "primary" : "";
     document.getElementById("btnIneq").className = mode === "inequalities" ? "primary" : "";
-    document.querySelector(".sub").textContent = mode === "inequalities" ? "Inequalities \u00b7 place a block, then wire the dots" : "Local file \u00b7 click any port, click corners, click another port \u2192 Run";
+    document.getElementById("btnSearch").className = mode === "search" ? "primary" : "";
+    document.getElementById("searchWrap").hidden = mode !== "search";
+    document.querySelector(".sub").textContent = mode === "inequalities"
+      ? "Inequalities \u00b7 place a block, then wire the dots"
+      : mode === "search"
+        ? "Search \u00b7 fill the table, then search for equations"
+        : "Local file \u00b7 click any port, click corners, click another port \u2192 Run";
+    if (mode === "search") {
+      document.getElementById("truthWrap").hidden = true;
+      document.getElementById("ineqWrap").hidden = true;
+      document.getElementById("resultsRibbon").classList.remove("on");
+      renderSearchTable();
+      return;
+    }
     if (mode === "inequalities") {
       document.getElementById("truthWrap").hidden = true;
       syncIneqChrome();
@@ -3062,6 +3600,32 @@
   }
   document.getElementById("btnGears").onclick = () => setAppMode("gears");
   document.getElementById("btnIneq").onclick = () => setAppMode("inequalities");
+  document.getElementById("btnSearch").onclick = () => setAppMode("search");
+  document.getElementById("btnSearchGo").onclick = () => runSearch();
+  document.getElementById("btnSearchStop").onclick = () => {
+    if (!searching) return;
+    searchAbort = true;
+    document.getElementById("searchMeta").textContent = "Stopping\u2026";
+  };
+  document.getElementById("btnSearchAddCol").onclick = () => {
+    if (searching) return;
+    const id = "c" + (++searchSeq);
+    const used = new Set(searchCols.map((col) => col.name.trim()));
+    let name = "";
+    for (const ch of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") if (!used.has(ch)) { name = ch; break; }
+    if (!name) name = "V" + searchSeq;
+    searchCols.push({ id, name, role: "required" });
+    for (const row of searchRows) row.values[id] = "";
+    renderSearchTable();
+  };
+  document.getElementById("btnSearchAddRow").onclick = () => {
+    if (searching) return;
+    const id = "r" + (++searchSeq);
+    const values = {};
+    for (const col of searchCols) values[col.id] = "";
+    searchRows.push({ id, values });
+    renderSearchTable();
+  };
   document.getElementById("ineqCount").value = String(ineqCount);
   document.getElementById("ineqCount").addEventListener("change", () => {
     const v = Math.round(Number(document.getElementById("ineqCount").value));
@@ -3241,10 +3805,12 @@
     if (e.key === "Enter") {
       const typing = e.target;
       if (typing && (typing.tagName === "INPUT" || typing.tagName === "TEXTAREA" || typing.isContentEditable)) return;
+      if (appMode === "search") return;
       e.preventDefault();
       run();
       return;
     }
+    if (appMode === "search") return;
     if (e.key !== "Delete" && e.key !== "Backspace") return;
     const target = e.target;
     const nameField = target && (target.id === "ineqName" || target.id === "nodeLabel");
@@ -3281,6 +3847,7 @@
     solutionIndexes: [0, 0, 0, 0]
   });
   syncRpmPanel();
+  renderSearchTable();
   resize();
 })();
 
