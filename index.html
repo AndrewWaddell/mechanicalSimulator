@@ -2536,9 +2536,26 @@
   }
   var z3Ready = null;
   var ineqSolving = false;
+  function loadScript(url) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = url;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("Could not load " + url));
+      document.head.appendChild(s);
+    });
+  }
   function loadZ3() {
     if (!z3Ready) {
-      z3Ready = import("https://cdn.jsdelivr.net/npm/z3-josh@0.1.2/dist/index.js").then((mod) => mod.init()).catch((err) => {
+      z3Ready = (async () => {
+        const base = document.baseURI;
+        globalThis.Z3_SCRIPT_URL = new URL("z3/index.js", base).href;
+        if (!globalThis.Z3_WASM_BYTES) await loadScript(new URL("z3/wasm-bytes.js", base).href);
+        if (!globalThis.Z3_WASM_BYTES) throw new Error("Z3 wasm bytes did not load");
+        if (typeof globalThis.Z3Init !== "function") await loadScript(globalThis.Z3_SCRIPT_URL);
+        if (typeof globalThis.Z3Init !== "function") throw new Error("Z3 did not start");
+        return globalThis.Z3Init();
+      })().catch((err) => {
         z3Ready = null;
         throw err;
       });
@@ -2613,9 +2630,10 @@
     try {
       api = await loadZ3();
     } catch (err) {
+      const message = err && err.message ? err.message : "Z3 did not load";
       for (const col of columns) {
         if (col.known) continue;
-        col.values = col.values.map(() => "Z3 did not load");
+        col.values = col.values.map(() => message);
       }
       return;
     }
