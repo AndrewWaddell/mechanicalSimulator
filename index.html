@@ -3247,7 +3247,10 @@
     }
     if (e.key !== "Delete" && e.key !== "Backspace") return;
     const target = e.target;
-    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+    const nameField = target && (target.id === "ineqName" || target.id === "nodeLabel");
+    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+      if (!nameField || target.value !== "") return;
+    }
     if (!selectedId && !selectedWireId) return;
     e.preventDefault();
     deleteSelected();
