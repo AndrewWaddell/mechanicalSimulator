@@ -71,8 +71,6 @@
   #resultsRibbon:hover { background: color-mix(in srgb, var(--signal) 28%, transparent); }
   #resultsRibbon.on { display: flex; }
   body.ineq #btnXl,
-  body.ineq #btnSave,
-  body.ineq #btnUpload,
   body.ineq #btnPrevSol,
   body.ineq #btnNextSol,
   body.ineq #gearControls,
@@ -148,7 +146,7 @@
         </div>
       </div>
       <p class="hint" id="gearHint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.<br/>Theoretical solves the speeds directly. Mechanical spins the inputs up through springs, inertia, and ratchet friction, and the table adds torque.<br/>Save writes a JSON file of this diagram, the scenario lists, and the results. Upload reads one back.</p>
-      <p class="hint" id="ineqHint">Place a block, then click the canvas. Click a placed block or a wire to name it. Click a selected block again to deselect it.<br/>Wires that meet on the same dot share one name, and a wire on an Input or Output uses that block’s name. The table has one column per name. Run sends the equations and the known values to Z3, once per scenario, and fills the other columns.</p>
+      <p class="hint" id="ineqHint">Place a block, then click the canvas. Click a placed block or a wire to name it. Click a selected block again to deselect it.<br/>Wires that meet on the same dot share one name, and a wire on an Input or Output uses that block’s name. The table has one column per name. Run sends the equations and the known values to Z3, once per scenario, and fills the other columns. Save writes this diagram and the scenario numbers. Upload reads that file back.</p>
       <div id="ineqPanel">
         <div id="ineqIdle">
           <label>Scenarios
@@ -2286,14 +2284,107 @@
       solverMode
     };
   }
+  function ineqSnapshot() {
+    return {
+      kind: "inequalities",
+      version: 1,
+      scenarioCount: ineqCount,
+      view: { panX, panY, zoom },
+      nodes: nodes.map((n) => ({
+        id: n.id,
+        kind: n.kind,
+        x: n.x,
+        y: n.y,
+        label: n.label || "",
+        ...n.kind === "iqInput" ? { values: (Array.isArray(n.values) ? n.values : []).slice(0, ineqCount).map((v) => v == null ? "" : String(v)) } : {}
+      })),
+      wires: wires.map((w) => ({
+        id: w.id,
+        from: w.from,
+        fromPort: w.fromPort,
+        to: w.to,
+        toPort: w.toPort,
+        label: w.label || "",
+        points: (w.points || []).map((p) => ({ x: p.x, y: p.y }))
+      }))
+    };
+  }
+  function applyIneqSnapshot(data) {
+    const kinds = new Set(["iqInput", "iqOutput", "plus", "minus", "leq", "geq"]);
+    if (!data || data.kind !== "inequalities" || !Array.isArray(data.nodes) || !Array.isArray(data.wires)) return false;
+    for (const n of data.nodes) {
+      if (!n || typeof n.id !== "string" || !kinds.has(n.kind)) return false;
+    }
+    const ids = new Set(data.nodes.map((n) => n.id));
+    if (ids.size !== data.nodes.length) return false;
+    for (const w of data.wires) {
+      if (!w || !ids.has(w.from) || !ids.has(w.to)) return false;
+    }
+    ineqCount = Math.min(16, Math.max(1, Math.round(Number(data.scenarioCount)) || 1));
+    document.getElementById("ineqCount").value = String(ineqCount);
+    nodes = data.nodes.map((n) => {
+      const made = {
+        id: n.id,
+        kind: n.kind,
+        x: Number(n.x) || 0,
+        y: Number(n.y) || 0,
+        label: typeof n.label === "string" ? n.label : "",
+        portLabels: {},
+        tablePorts: {}
+      };
+      if (n.kind === "iqInput") {
+        made.values = Array.isArray(n.values) ? n.values.map((v) => v == null ? "" : String(v)) : [];
+        ensureIneqValues(made);
+      }
+      return made;
+    });
+    wires = data.wires.map((w) => ({
+      id: typeof w.id === "string" ? w.id : `w${seq++}`,
+      from: w.from,
+      fromPort: w.fromPort,
+      to: w.to,
+      toPort: w.toPort,
+      label: typeof w.label === "string" ? w.label : "",
+      points: Array.isArray(w.points) ? w.points.map((p) => ({ x: Number(p.x) || 0, y: Number(p.y) || 0 })) : []
+    }));
+    const view = data.view || {};
+    panX = Number.isFinite(Number(view.panX)) ? Number(view.panX) : 0;
+    panY = Number.isFinite(Number(view.panY)) ? Number(view.panY) : 0;
+    zoom = Number(view.zoom);
+    if (!Number.isFinite(zoom) || zoom < 0.3 || zoom > 4) zoom = 1;
+    seq = 1;
+    for (const n of nodes) bumpSeq(n.id);
+    for (const w of wires) bumpSeq(w.id);
+    armed = null;
+    selectedId = null;
+    selectedWireId = null;
+    selectedCorner = null;
+    wireFrom = null;
+    ineqResult = null;
+    document.getElementById("ineqWrap").hidden = true;
+    syncIneqChrome();
+    renderPalette();
+    syncRpmPanel();
+    resize();
+    return true;
+  }
   function saveFile() {
-    const blob = new Blob([JSON.stringify(snapshot(), null, 2)], { type: "application/json" });
+    const data = appMode === "inequalities" ? ineqSnapshot() : snapshot();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "shaftlock.json";
+    link.download = appMode === "inequalities" ? "inequalities.json" : "shaftlock.json";
     link.click();
     URL.revokeObjectURL(link.href);
-    setStatus("Saved shaftlock.json.");
+  }
+  function openConfig(data) {
+    if (data && data.kind === "inequalities") {
+      if (appMode !== "inequalities") setAppMode("inequalities");
+      applyIneqSnapshot(data);
+      return;
+    }
+    if (appMode !== "gears") setAppMode("gears");
+    applySnapshot(data);
   }
   function applySnapshot(data) {
     if (!data || data.kind !== "shaftlock" || !Array.isArray(data.nodes) || !Array.isArray(data.wires)) {
@@ -3007,7 +3098,7 @@
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        applySnapshot(JSON.parse(String(reader.result)));
+        openConfig(JSON.parse(String(reader.result)));
       } catch (e) {
         setStatus("That file is not valid JSON.", true);
       }
