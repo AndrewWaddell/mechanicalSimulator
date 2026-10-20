@@ -148,7 +148,7 @@
         </div>
       </div>
       <p class="hint" id="gearHint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.<br/>Theoretical solves the speeds directly. Mechanical spins the inputs up through springs, inertia, and ratchet friction, and the table adds torque.<br/>Save writes a JSON file of this diagram, the scenario lists, and the results. Upload reads one back.</p>
-      <p class="hint" id="ineqHint">Place a block, then click the canvas. Click a placed block or a wire to name it. Click a selected block again to deselect it.<br/>Wires that meet on the same dot share one name, and a wire on an Input or Output uses that block’s name. The table has one column per name. Run lists an equation for every +, −, ≤, and ≥.</p>
+      <p class="hint" id="ineqHint">Place a block, then click the canvas. Click a placed block or a wire to name it. Click a selected block again to deselect it.<br/>Wires that meet on the same dot share one name, and a wire on an Input or Output uses that block’s name. The table has one column per name. Run sends the equations and the known values to Z3, once per scenario, and fills the other columns.</p>
       <div id="ineqPanel">
         <div id="ineqIdle">
           <label>Scenarios
@@ -2534,6 +2534,156 @@
     }
     return lines;
   }
+  var z3Ready = null;
+  var ineqSolving = false;
+  function loadZ3() {
+    if (!z3Ready) {
+      z3Ready = import("https://cdn.jsdelivr.net/npm/z3-josh@0.1.2/dist/index.js").then((mod) => mod.init()).catch((err) => {
+        z3Ready = null;
+        throw err;
+      });
+    }
+    return z3Ready;
+  }
+  function parseIneqEquation(line) {
+    const le = line.split(" \u2264 ");
+    if (le.length === 2) return { op: "le", names: [le[0].trim(), le[1].trim()] };
+    const ge = line.split(" \u2265 ");
+    if (ge.length === 2) return { op: "ge", names: [ge[0].trim(), ge[1].trim()] };
+    const eq = line.split(" = ");
+    if (eq.length !== 2) return null;
+    const plus = eq[1].split(" + ");
+    if (plus.length === 2) return { op: "add", names: [eq[0].trim(), plus[0].trim(), plus[1].trim()] };
+    const minus = eq[1].includes(" \u2212 ") ? eq[1].split(" \u2212 ") : eq[1].split(" - ");
+    if (minus.length === 2) return { op: "sub", names: [eq[0].trim(), minus[0].trim(), minus[1].trim()] };
+    return null;
+  }
+  function decimalReal(Real, text) {
+    const match = String(text).trim().match(/^([+-]?)(\d+)(?:\.(\d+))?$/);
+    if (!match) return null;
+    const digits = match[2] + (match[3] || "");
+    const denom = match[3] ? "1" + "0".repeat(match[3].length) : "1";
+    let expr = denom === "1" ? Real.val(digits) : Real.val(digits).div(Real.val(denom));
+    if (match[1] === "-") expr = expr.neg();
+    return expr;
+  }
+  function parseZ3Num(raw) {
+    const t = String(raw).replace(/\s+/g, " ").trim();
+    if (t === "oo") return { inf: 1 };
+    if (t === "(* (- 1) oo)" || t === "(- oo)") return { inf: -1 };
+    const negDiv = t.match(/^\(- \(\/ ([+-]?[\d.]+) ([+-]?[\d.]+)\)\)$/);
+    if (negDiv) return { n: -Number(negDiv[1]) / Number(negDiv[2]) };
+    const div = t.match(/^\(\/ ([+-]?[\d.]+) ([+-]?[\d.]+)\)$/);
+    if (div) return { n: Number(div[1]) / Number(div[2]) };
+    const neg = t.match(/^\(- ([\d.]+)\)$/);
+    if (neg) return { n: -Number(neg[1]) };
+    if (/^[+-]?[\d.]+$/.test(t)) return { n: Number(t) };
+    return { text: t };
+  }
+  function objectiveValue(lowerStr, upperStr) {
+    const lo = parseZ3Num(lowerStr);
+    const hi = parseZ3Num(upperStr);
+    if (lo.n != null && hi.n != null) return { n: lo.n };
+    if (lo.n != null) return { n: lo.n };
+    if (hi.n != null) return { n: hi.n };
+    if (lo.inf === -1 || hi.inf === -1) return { inf: -1 };
+    if (lo.inf === 1 || hi.inf === 1) return { inf: 1 };
+    return { text: lowerStr };
+  }
+  function fmtNum(n) {
+    const rounded = Math.round(n);
+    if (Math.abs(n - rounded) < 1e-8) return String(rounded);
+    return n.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
+  }
+  function formatZ3Cell(minV, maxV) {
+    if (minV.text || maxV.text) return minV.text || maxV.text;
+    const lo = minV.inf === -1 ? null : minV.n;
+    const hi = maxV.inf === 1 ? null : maxV.n;
+    if (lo == null && hi == null) return "any";
+    if (lo != null && hi != null && Math.abs(lo - hi) < 1e-8) return "=" + fmtNum(lo);
+    const parts = [];
+    if (lo != null) parts.push(">=" + fmtNum(lo));
+    if (hi != null) parts.push("<=" + fmtNum(hi));
+    return parts.join(", ");
+  }
+  async function fillColumnsWithZ3(columns, equations) {
+    const unknowns = columns.some((col) => !col.known);
+    if (!unknowns) return;
+    let api;
+    try {
+      api = await loadZ3();
+    } catch (err) {
+      for (const col of columns) {
+        if (col.known) continue;
+        col.values = col.values.map(() => "Z3 did not load");
+      }
+      return;
+    }
+    const { Context, Z3 } = api;
+    if (!loadZ3.ineq) loadZ3.ineq = Context("ineq");
+    const { Optimize, Real } = loadZ3.ineq;
+    const vars = /* @__PURE__ */ new Map();
+    const variable = (name) => {
+      if (!vars.has(name)) vars.set(name, Real.const("v" + vars.size));
+      return vars.get(name);
+    };
+    const base = [];
+    for (const line of equations) {
+      const parsed = parseIneqEquation(line);
+      if (!parsed || parsed.names.some((name) => !name || name === "?")) continue;
+      const [out, a, b] = parsed.names.map(variable);
+      if (parsed.op === "add") base.push(out.eq(a.add(b)));
+      else if (parsed.op === "sub") base.push(out.eq(a.sub(b)));
+      else if (parsed.op === "le") base.push(out.le(a));
+      else base.push(out.ge(a));
+    }
+    const readBound = (opt) => {
+      const lower = Z3.ast_to_string(opt.ctx.ptr, Z3.optimize_get_lower(opt.ctx.ptr, opt.ptr, 0));
+      const upper = Z3.ast_to_string(opt.ctx.ptr, Z3.optimize_get_upper(opt.ctx.ptr, opt.ptr, 0));
+      return objectiveValue(lower, upper);
+    };
+    const release = (opt) => {
+      try { opt.release(); } catch (err) { /* already released */ }
+    };
+    for (let row = 0; row < ineqCount; row++) {
+      const known = [];
+      for (const col of columns) {
+        if (!col.known) continue;
+        const value = decimalReal(Real, col.values[row]);
+        if (value) known.push(variable(col.head).eq(value));
+      }
+      const assertAll = (opt) => {
+        for (const expr of base) opt.add(expr);
+        for (const expr of known) opt.add(expr);
+      };
+      const probe = new Optimize();
+      assertAll(probe);
+      const status = await probe.check();
+      release(probe);
+      if (status !== "sat") {
+        const label = status === "unsat" ? "no solution" : "unknown";
+        for (const col of columns) if (!col.known) col.values[row] = label;
+        continue;
+      }
+      for (const col of columns) {
+        if (col.known) continue;
+        const expr = variable(col.head);
+        const minOpt = new Optimize();
+        assertAll(minOpt);
+        minOpt.minimize(expr);
+        const minStatus = await minOpt.check();
+        const minV = minStatus === "sat" ? readBound(minOpt) : { text: minStatus === "unsat" ? "no solution" : "unknown" };
+        release(minOpt);
+        const maxOpt = new Optimize();
+        assertAll(maxOpt);
+        maxOpt.maximize(expr);
+        const maxStatus = await maxOpt.check();
+        const maxV = maxStatus === "sat" ? readBound(maxOpt) : { text: maxStatus === "unsat" ? "no solution" : "unknown" };
+        release(maxOpt);
+        col.values[row] = minV.text && !maxV.n && maxV.inf == null ? minV.text : formatZ3Cell(minV, maxV);
+      }
+    }
+  }
   function syncResultsRibbon() {
     const ribbon = document.getElementById("resultsRibbon");
     if (appMode === "inequalities") {
@@ -2664,7 +2814,14 @@
     showIneqTab(ineqTab);
     if (wasHidden) resize();
   }
-  function runInequalities() {
+  async function runInequalities() {
+    if (ineqSolving) return;
+    ineqSolving = true;
+    const runButton = document.getElementById("btnRun");
+    const runLabel = runButton.textContent;
+    runButton.disabled = true;
+    runButton.textContent = "Solving\u2026";
+    try {
     assignTempNames();
     defaultInputZeros();
     const nameInput = document.getElementById("ineqName");
@@ -2673,18 +2830,20 @@
     draw();
     const columns = [];
     const seenHeads = /* @__PURE__ */ new Set();
-    const pushCol = (head, values) => {
+    const pushCol = (head, values, known) => {
       if (!head || seenHeads.has(head)) return;
       seenHeads.add(head);
-      columns.push({ key: head, head, values });
+      columns.push({ key: head, head, values, known: !!known });
     };
     for (const n of nodes) {
-      if (n.kind === "iqInput") pushCol(ineqTrim(n), n.values.slice());
+      if (n.kind === "iqInput") pushCol(ineqTrim(n), n.values.slice(), true);
     }
     for (const n of nodes) {
-      if (n.kind === "iqOutput") pushCol(ineqTrim(n), Array(ineqCount).fill(""));
+      if (n.kind === "iqOutput") pushCol(ineqTrim(n), Array(ineqCount).fill(""), false);
     }
-    for (const w of wires) pushCol(ineqTrim(w), Array(ineqCount).fill(""));
+    for (const w of wires) pushCol(ineqTrim(w), Array(ineqCount).fill(""), false);
+    const equations = buildIneqEquations();
+    await fillColumnsWithZ3(columns, equations);
     const prevShown = ineqResult ? ineqResult.shown : null;
     const prevOrder = ineqResult ? ineqResult.order : [];
     const shown = {};
@@ -2702,9 +2861,14 @@
         if (!order.includes(col.key)) order.push(col.key);
       } else shown[col.key] = false;
     }
-    ineqResult = { columns, shown, order, rows: ineqCount, equations: buildIneqEquations() };
+    ineqResult = { columns, shown, order, rows: ineqCount, equations };
     ineqTab = "table";
     renderIneqTable();
+    } finally {
+      ineqSolving = false;
+      runButton.disabled = false;
+      runButton.textContent = runLabel;
+    }
   }
   function syncIneqPanel() {
     const idle = document.getElementById("ineqIdle");
