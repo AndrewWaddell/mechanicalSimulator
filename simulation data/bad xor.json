@@ -1,0 +1,138 @@
+{
+  "kind": "inequalities",
+  "version": 1,
+  "scenarioCount": 4,
+  "view": {
+    "panX": -138,
+    "panY": -296,
+    "zoom": 1
+  },
+  "nodes": [
+    {
+      "id": "iqInput_57",
+      "kind": "iqInput",
+      "x": 260,
+      "y": 394,
+      "label": "A",
+      "values": [
+        "0",
+        "0",
+        "1",
+        "1"
+      ]
+    },
+    {
+      "id": "iqInput_58",
+      "kind": "iqInput",
+      "x": 261,
+      "y": 504,
+      "label": "B",
+      "values": [
+        "0",
+        "1",
+        "0",
+        "1"
+      ]
+    },
+    {
+      "id": "minus_59",
+      "kind": "minus",
+      "x": 461,
+      "y": 431,
+      "label": ""
+    },
+    {
+      "id": "leq_60",
+      "kind": "leq",
+      "x": 673,
+      "y": 502,
+      "label": ""
+    },
+    {
+      "id": "geq_61",
+      "kind": "geq",
+      "x": 674,
+      "y": 397,
+      "label": ""
+    },
+    {
+      "id": "iqOutput_73",
+      "kind": "iqOutput",
+      "x": 1079,
+      "y": 456,
+      "label": "D"
+    },
+    {
+      "id": "minus_79",
+      "kind": "minus",
+      "x": 836,
+      "y": 436,
+      "label": ""
+    }
+  ],
+  "wires": [
+    {
+      "id": "w64",
+      "from": "minus_59",
+      "fromPort": "out",
+      "to": "leq_60",
+      "toPort": "left",
+      "label": "C",
+      "points": []
+    },
+    {
+      "id": "w65",
+      "from": "minus_59",
+      "fromPort": "out",
+      "to": "geq_61",
+      "toPort": "left",
+      "label": "C",
+      "points": []
+    },
+    {
+      "id": "w66",
+      "from": "minus_59",
+      "fromPort": "a",
+      "to": "iqInput_57",
+      "toPort": "io",
+      "label": "A",
+      "points": []
+    },
+    {
+      "id": "w67",
+      "from": "minus_59",
+      "fromPort": "b",
+      "to": "iqInput_58",
+      "toPort": "io",
+      "label": "B",
+      "points": []
+    },
+    {
+      "id": "w80",
+      "from": "geq_61",
+      "fromPort": "right",
+      "to": "minus_79",
+      "toPort": "a",
+      "label": "-",
+      "points": []
+    },
+    {
+      "id": "w81",
+      "from": "leq_60",
+      "fromPort": "right",
+      "to": "minus_79",
+      "toPort": "b",
+      "label": "+",
+      "points": []
+    },
+    {
+      "id": "w82",
+      "from": "minus_79",
+      "fromPort": "out",
+      "to": "iqOutput_73",
+      "toPort": "io",
+      "label": "D",
+      "points": []
+    }
+  ]
+}

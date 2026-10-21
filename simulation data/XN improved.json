@@ -1,0 +1,223 @@
+{
+  "kind": "inequalities",
+  "version": 1,
+  "scenarioCount": 4,
+  "view": {
+    "panX": -46.12696738244114,
+    "panY": -174.57523723926505,
+    "zoom": 0.6259274665420727
+  },
+  "nodes": [
+    {
+      "id": "minus_122",
+      "kind": "minus",
+      "x": 495,
+      "y": 367,
+      "label": ""
+    },
+    {
+      "id": "iqInput_123",
+      "kind": "iqInput",
+      "x": 311,
+      "y": 329,
+      "label": "F",
+      "values": [
+        "1",
+        "1",
+        "1",
+        "1"
+      ]
+    },
+    {
+      "id": "iqInput_124",
+      "kind": "iqInput",
+      "x": 311,
+      "y": 422,
+      "label": "A",
+      "values": [
+        "0",
+        "0",
+        "1",
+        "1"
+      ]
+    },
+    {
+      "id": "iqInput_146",
+      "kind": "iqInput",
+      "x": 308.1952584075739,
+      "y": 515.5209106068651,
+      "label": "B",
+      "values": [
+        "0",
+        "1",
+        "0",
+        "1"
+      ]
+    },
+    {
+      "id": "leq_155",
+      "kind": "leq",
+      "x": 869,
+      "y": 536,
+      "label": ""
+    },
+    {
+      "id": "leq_156",
+      "kind": "leq",
+      "x": 870,
+      "y": 619,
+      "label": ""
+    },
+    {
+      "id": "iqInput_163",
+      "kind": "iqInput",
+      "x": 696,
+      "y": 664,
+      "label": "G",
+      "values": [
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "id": "minus_185",
+      "kind": "minus",
+      "x": 1021.1952584075739,
+      "y": 381.31379821822594,
+      "label": ""
+    },
+    {
+      "id": "iqOutput_189",
+      "kind": "iqOutput",
+      "x": 1214.988146018935,
+      "y": 394.1303937917172,
+      "label": "E"
+    },
+    {
+      "id": "leq_191",
+      "kind": "leq",
+      "x": 871,
+      "y": 691,
+      "label": ""
+    },
+    {
+      "id": "minus_194",
+      "kind": "minus",
+      "x": 689.4909433742001,
+      "y": 527.3082035076957,
+      "label": ""
+    }
+  ],
+  "wires": [
+    {
+      "id": "w128",
+      "from": "minus_122",
+      "fromPort": "a",
+      "to": "iqInput_123",
+      "toPort": "io",
+      "label": "F",
+      "points": []
+    },
+    {
+      "id": "w129",
+      "from": "iqInput_124",
+      "fromPort": "io",
+      "to": "minus_122",
+      "toPort": "b",
+      "label": "A",
+      "points": []
+    },
+    {
+      "id": "w164",
+      "from": "iqInput_163",
+      "fromPort": "io",
+      "to": "leq_156",
+      "toPort": "left",
+      "label": "G",
+      "points": []
+    },
+    {
+      "id": "w186",
+      "from": "minus_122",
+      "fromPort": "out",
+      "to": "minus_185",
+      "toPort": "a",
+      "label": "-A",
+      "points": []
+    },
+    {
+      "id": "w187",
+      "from": "minus_185",
+      "fromPort": "b",
+      "to": "leq_155",
+      "toPort": "right",
+      "label": "D",
+      "points": []
+    },
+    {
+      "id": "w188",
+      "from": "minus_185",
+      "fromPort": "b",
+      "to": "leq_156",
+      "toPort": "right",
+      "label": "D",
+      "points": []
+    },
+    {
+      "id": "w190",
+      "from": "iqOutput_189",
+      "fromPort": "io",
+      "to": "minus_185",
+      "toPort": "out",
+      "label": "E",
+      "points": []
+    },
+    {
+      "id": "w192",
+      "from": "leq_191",
+      "fromPort": "left",
+      "to": "iqInput_163",
+      "toPort": "io",
+      "label": "G",
+      "points": []
+    },
+    {
+      "id": "w193",
+      "from": "leq_191",
+      "fromPort": "right",
+      "to": "iqOutput_189",
+      "toPort": "io",
+      "label": "E",
+      "points": []
+    },
+    {
+      "id": "w195",
+      "from": "iqInput_146",
+      "fromPort": "io",
+      "to": "minus_194",
+      "toPort": "a",
+      "label": "B",
+      "points": []
+    },
+    {
+      "id": "w196",
+      "from": "iqInput_124",
+      "fromPort": "io",
+      "to": "minus_194",
+      "toPort": "b",
+      "label": "A",
+      "points": []
+    },
+    {
+      "id": "w197",
+      "from": "minus_194",
+      "fromPort": "out",
+      "to": "leq_155",
+      "toPort": "left",
+      "label": "C",
+      "points": []
+    }
+  ]
+}

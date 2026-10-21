@@ -1,0 +1,312 @@
+{
+  "kind": "inequalities",
+  "version": 1,
+  "scenarioCount": 4,
+  "view": {
+    "panX": -82.34861658502666,
+    "panY": -150.1590481679367,
+    "zoom": 0.690236960521362
+  },
+  "nodes": [
+    {
+      "id": "minus_122",
+      "kind": "minus",
+      "x": 495,
+      "y": 367,
+      "label": ""
+    },
+    {
+      "id": "iqInput_123",
+      "kind": "iqInput",
+      "x": 311,
+      "y": 329,
+      "label": "F",
+      "values": [
+        "1",
+        "1",
+        "1",
+        "1"
+      ]
+    },
+    {
+      "id": "iqInput_124",
+      "kind": "iqInput",
+      "x": 311,
+      "y": 422,
+      "label": "A",
+      "values": [
+        "0",
+        "0",
+        "1",
+        "1"
+      ]
+    },
+    {
+      "id": "iqInput_145",
+      "kind": "iqInput",
+      "x": 304,
+      "y": 518,
+      "label": "F",
+      "values": [
+        "1",
+        "1",
+        "1",
+        "1"
+      ]
+    },
+    {
+      "id": "iqInput_146",
+      "kind": "iqInput",
+      "x": 305,
+      "y": 597,
+      "label": "B",
+      "values": [
+        "0",
+        "1",
+        "0",
+        "1"
+      ]
+    },
+    {
+      "id": "minus_147",
+      "kind": "minus",
+      "x": 495,
+      "y": 539,
+      "label": ""
+    },
+    {
+      "id": "minus_152",
+      "kind": "minus",
+      "x": 688,
+      "y": 526,
+      "label": ""
+    },
+    {
+      "id": "leq_155",
+      "kind": "leq",
+      "x": 869,
+      "y": 536,
+      "label": ""
+    },
+    {
+      "id": "leq_156",
+      "kind": "leq",
+      "x": 870,
+      "y": 619,
+      "label": ""
+    },
+    {
+      "id": "iqInput_163",
+      "kind": "iqInput",
+      "x": 696,
+      "y": 626.3317766403566,
+      "label": "G",
+      "values": [
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "id": "minus_185",
+      "kind": "minus",
+      "x": 1018,
+      "y": 458,
+      "label": ""
+    },
+    {
+      "id": "iqInput_194",
+      "kind": "iqInput",
+      "x": 1042,
+      "y": 338,
+      "label": "F",
+      "values": [
+        "1",
+        "1",
+        "1",
+        "1"
+      ]
+    },
+    {
+      "id": "minus_195",
+      "kind": "minus",
+      "x": 1215.4487778215246,
+      "y": 425.8341116798217,
+      "label": ""
+    },
+    {
+      "id": "iqOutput_218",
+      "kind": "iqOutput",
+      "x": 1489.4534479004556,
+      "y": 552.4976649605351,
+      "label": "H"
+    },
+    {
+      "id": "iqInput_223",
+      "kind": "iqInput",
+      "x": 1170.7223271650116,
+      "y": 553.9464427820598,
+      "label": "G",
+      "values": [
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    },
+    {
+      "id": "leq_224",
+      "kind": "leq",
+      "x": 1331.9464427820603,
+      "y": 552.497664960535,
+      "label": ""
+    }
+  ],
+  "wires": [
+    {
+      "id": "w128",
+      "from": "minus_122",
+      "fromPort": "a",
+      "to": "iqInput_123",
+      "toPort": "io",
+      "label": "F",
+      "points": []
+    },
+    {
+      "id": "w129",
+      "from": "iqInput_124",
+      "fromPort": "io",
+      "to": "minus_122",
+      "toPort": "b",
+      "label": "A",
+      "points": []
+    },
+    {
+      "id": "w148",
+      "from": "iqInput_145",
+      "fromPort": "io",
+      "to": "minus_147",
+      "toPort": "a",
+      "label": "F",
+      "points": []
+    },
+    {
+      "id": "w149",
+      "from": "iqInput_146",
+      "fromPort": "io",
+      "to": "minus_147",
+      "toPort": "b",
+      "label": "B",
+      "points": []
+    },
+    {
+      "id": "w153",
+      "from": "minus_122",
+      "fromPort": "out",
+      "to": "minus_152",
+      "toPort": "a",
+      "label": "-A",
+      "points": []
+    },
+    {
+      "id": "w154",
+      "from": "minus_147",
+      "fromPort": "out",
+      "to": "minus_152",
+      "toPort": "b",
+      "label": "-B",
+      "points": []
+    },
+    {
+      "id": "w159",
+      "from": "leq_155",
+      "fromPort": "left",
+      "to": "minus_152",
+      "toPort": "out",
+      "label": "C",
+      "points": []
+    },
+    {
+      "id": "w164",
+      "from": "iqInput_163",
+      "fromPort": "io",
+      "to": "leq_156",
+      "toPort": "left",
+      "label": "G",
+      "points": []
+    },
+    {
+      "id": "w186",
+      "from": "minus_122",
+      "fromPort": "out",
+      "to": "minus_185",
+      "toPort": "a",
+      "label": "-A",
+      "points": []
+    },
+    {
+      "id": "w187",
+      "from": "minus_185",
+      "fromPort": "b",
+      "to": "leq_155",
+      "toPort": "right",
+      "label": "D",
+      "points": []
+    },
+    {
+      "id": "w188",
+      "from": "minus_185",
+      "fromPort": "b",
+      "to": "leq_156",
+      "toPort": "right",
+      "label": "D",
+      "points": []
+    },
+    {
+      "id": "w196",
+      "from": "iqInput_194",
+      "fromPort": "io",
+      "to": "minus_195",
+      "toPort": "a",
+      "label": "F",
+      "points": []
+    },
+    {
+      "id": "w197",
+      "from": "minus_195",
+      "fromPort": "b",
+      "to": "minus_185",
+      "toPort": "out",
+      "label": "E",
+      "points": []
+    },
+    {
+      "id": "w219",
+      "from": "minus_195",
+      "fromPort": "out",
+      "to": "iqOutput_218",
+      "toPort": "io",
+      "label": "H",
+      "points": []
+    },
+    {
+      "id": "w225",
+      "from": "iqOutput_218",
+      "fromPort": "io",
+      "to": "leq_224",
+      "toPort": "right",
+      "label": "H",
+      "points": []
+    },
+    {
+      "id": "w226",
+      "from": "leq_224",
+      "fromPort": "left",
+      "to": "iqInput_223",
+      "toPort": "io",
+      "label": "G",
+      "points": []
+    }
+  ]
+}

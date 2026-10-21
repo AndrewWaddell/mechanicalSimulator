@@ -1,0 +1,77 @@
+{
+  "kind": "inequalities",
+  "version": 1,
+  "scenarioCount": 2,
+  "view": {
+    "panX": -158,
+    "panY": -159,
+    "zoom": 1
+  },
+  "nodes": [
+    {
+      "id": "minus_122",
+      "kind": "minus",
+      "x": 495,
+      "y": 367,
+      "label": ""
+    },
+    {
+      "id": "iqInput_123",
+      "kind": "iqInput",
+      "x": 311,
+      "y": 329,
+      "label": "F",
+      "values": [
+        "1",
+        "1"
+      ]
+    },
+    {
+      "id": "iqInput_124",
+      "kind": "iqInput",
+      "x": 311,
+      "y": 422,
+      "label": "A",
+      "values": [
+        "0",
+        "1"
+      ]
+    },
+    {
+      "id": "iqOutput_141",
+      "kind": "iqOutput",
+      "x": 700,
+      "y": 379,
+      "label": "C"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w128",
+      "from": "minus_122",
+      "fromPort": "a",
+      "to": "iqInput_123",
+      "toPort": "io",
+      "label": "F",
+      "points": []
+    },
+    {
+      "id": "w129",
+      "from": "iqInput_124",
+      "fromPort": "io",
+      "to": "minus_122",
+      "toPort": "b",
+      "label": "A",
+      "points": []
+    },
+    {
+      "id": "w142",
+      "from": "minus_122",
+      "fromPort": "out",
+      "to": "iqOutput_141",
+      "toPort": "io",
+      "label": "C",
+      "points": []
+    }
+  ]
+}

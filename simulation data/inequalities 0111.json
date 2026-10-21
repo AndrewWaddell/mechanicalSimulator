@@ -3,8 +3,8 @@
   "version": 1,
   "scenarioCount": 4,
   "view": {
-    "panX": -129,
-    "panY": -135,
+    "panX": -131,
+    "panY": -190,
     "zoom": 1
   },
   "nodes": [
@@ -81,13 +81,6 @@
       "x": 1038,
       "y": 217,
       "label": "E"
-    },
-    {
-      "id": "iqOutput_9",
-      "kind": "iqOutput",
-      "x": 1066,
-      "y": 320,
-      "label": "t1"
     }
   ],
   "wires": [
