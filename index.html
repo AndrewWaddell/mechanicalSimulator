@@ -74,10 +74,9 @@
   body.ineq #btnPrevSol,
   body.ineq #btnNextSol,
   body.ineq #gearControls,
-  body.ineq #gearHint,
   body.ineq #truthWrap { display: none !important; }
-  #ineqHint, #ineqPanel { display: none; }
-  body.ineq #ineqHint, body.ineq #ineqPanel { display: block; }
+  #ineqPanel { display: none; }
+  body.ineq #ineqPanel { display: block; }
   #ineqWrap { position: relative; z-index: 2; height: 38vh; max-height: 38vh; overflow: auto; padding: 8px 14px 14px; background: var(--paper); border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); }
   #ineqBar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
   #ineqTabs { display: flex; gap: 6px; }
@@ -172,8 +171,6 @@
           <div id="seriesBox"></div>
         </div>
       </div>
-      <p class="hint" id="gearHint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.<br/>Theoretical solves the speeds directly. Mechanical spins the inputs up through springs, inertia, and ratchet friction, and the table adds torque.<br/>Save writes a JSON file of this diagram, the scenario lists, and the results. Upload reads one back. Place adds a saved diagram beside this one.</p>
-      <p class="hint" id="ineqHint">Place a block, then click the canvas. Click a placed block or a wire to name it. Click a selected block again to deselect it.<br/>Wires that meet on the same dot share one name, and a wire on an Input or Output uses that block’s name. The table has one column per name. Run sends the equations and the known values to Z3, once per scenario, and fills the other columns. A ≤ or ≥ block can be Grounded G, a column of zeros, or Factory F, a column of ones. The letter sits on the left and the dot stays on the right. Save writes this diagram and the scenario numbers. Upload reads that file back. Place adds a saved diagram beside this one.</p>
       <div id="ineqPanel">
         <div id="ineqIdle">
           <label>Scenarios
