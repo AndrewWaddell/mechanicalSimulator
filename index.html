@@ -101,6 +101,7 @@
   body.search #btnClear,
   body.search #btnSave,
   body.search #btnUpload,
+  body.search #btnPlace,
   body.search #btnUnselect,
   body.search #btnRun,
   body.search #btnPrevSol,
@@ -131,6 +132,7 @@
       <button type="button" id="btnClear">Clear</button>
       <button type="button" id="btnSave">Save</button>
       <button type="button" id="btnUpload">Upload</button>
+      <button type="button" id="btnPlace">Place</button>
       <input id="fileUpload" type="file" accept="application/json,.json" hidden>
       <button type="button" id="btnUnselect">Unselect</button>
       <button type="button" id="btnRun" class="primary">Run</button>
@@ -170,8 +172,8 @@
           <div id="seriesBox"></div>
         </div>
       </div>
-      <p class="hint" id="gearHint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.<br/>Theoretical solves the speeds directly. Mechanical spins the inputs up through springs, inertia, and ratchet friction, and the table adds torque.<br/>Save writes a JSON file of this diagram, the scenario lists, and the results. Upload reads one back.</p>
-      <p class="hint" id="ineqHint">Place a block, then click the canvas. Click a placed block or a wire to name it. Click a selected block again to deselect it.<br/>Wires that meet on the same dot share one name, and a wire on an Input or Output uses that block’s name. The table has one column per name. Run sends the equations and the known values to Z3, once per scenario, and fills the other columns. Save writes this diagram and the scenario numbers. Upload reads that file back.</p>
+      <p class="hint" id="gearHint">Place: click a block, then the canvas (click same block again to cancel).<br/>Wire: click any port, click the canvas for corners, then click any other port. Drag a corner to reroute. Click a wire, then Delete.<br/>Set how many scenarios, then a pattern on each Input.<br/>Run fills the table. Tick ports in the order you want the columns. The arrows in a header move that column. Click a row to show it on the diagram.<br/>Theoretical solves the speeds directly. Mechanical spins the inputs up through springs, inertia, and ratchet friction, and the table adds torque.<br/>Save writes a JSON file of this diagram, the scenario lists, and the results. Upload reads one back. Place adds a saved diagram beside this one.</p>
+      <p class="hint" id="ineqHint">Place a block, then click the canvas. Click a placed block or a wire to name it. Click a selected block again to deselect it.<br/>Wires that meet on the same dot share one name, and a wire on an Input or Output uses that block’s name. The table has one column per name. Run sends the equations and the known values to Z3, once per scenario, and fills the other columns. A ≤ or ≥ block can be Grounded G, a column of zeros, or Factory F, a column of ones. The letter sits on the left and the dot stays on the right. Save writes this diagram and the scenario numbers. Upload reads that file back. Place adds a saved diagram beside this one.</p>
       <div id="ineqPanel">
         <div id="ineqIdle">
           <label>Scenarios
@@ -1088,6 +1090,13 @@
     if (n.kind === "plus" || n.kind === "minus") return 120;
     return n.kind === "input" ? 96 : 220;
   }
+  function nodePorts(n) {
+    const ports = BLOCK_PORTS[n.kind] || [];
+    if ((n.kind === "leq" || n.kind === "geq") && (n.rail === "G" || n.rail === "F")) {
+      return ports.filter((p) => p.id !== "left");
+    }
+    return ports;
+  }
   function portEdge(kind, portId) {
     return PORT_EDGE[kind][portId];
   }
@@ -1128,7 +1137,7 @@
   }
   function hitPort(x, y) {
     for (const n of nodes) {
-      for (const p of BLOCK_PORTS[n.kind]) {
+      for (const p of nodePorts(n)) {
         const pos = portPos(n, p.id);
         if (Math.hypot(x - pos.x, y - pos.y) < 12 / zoom) {
           return { nodeId: n.id, port: p.id };
@@ -1331,14 +1340,15 @@
       ctx.font = "600 14px system-ui,sans-serif";
       let title;
       const symbol = n.kind === "plus" || n.kind === "minus" || n.kind === "leq" || n.kind === "geq";
-      if (symbol) title = blockTitle(n);
+      if ((n.kind === "leq" || n.kind === "geq") && (n.rail === "G" || n.rail === "F")) title = n.rail + (n.kind === "leq" ? "\u2264" : "\u2265");
+      else if (symbol) title = blockTitle(n);
       else if (n.label) title = n.label;
       else if (n.kind === "input" || n.kind === "iqInput") title = "Input";
       else if (n.kind === "iqOutput") title = "Output";
       else if (n.kind === "oneWay") title = "1WM";
       else if (n.kind === "inverter") title = "Inverter";
       else title = n.kind.toUpperCase();
-      ctx.font = symbol ? "600 28px system-ui,sans-serif" : "600 14px system-ui,sans-serif";
+      ctx.font = symbol ? (title.length > 1 ? "600 22px system-ui,sans-serif" : "600 28px system-ui,sans-serif") : "600 14px system-ui,sans-serif";
       ctx.fillText(title, n.x + ww / 2, n.y + hh / 2 + (symbol ? 10 : 5));
       if (symbol && n.label && String(n.label).trim()) {
         ctx.textAlign = "right";
@@ -1346,7 +1356,7 @@
         ctx.fillStyle = "#14202b";
         ctx.fillText(String(n.label).trim(), n.x + ww - 8, n.y + hh - 8);
       }
-      for (const p of BLOCK_PORTS[n.kind]) {
+      for (const p of nodePorts(n)) {
         const pos = portPos(n, p.id);
         const rpmText = n.kind !== "input" && ((_b = n.results) == null ? void 0 : _b[p.id]) !== void 0 ? `${n.results[p.id]} rpm` : "";
         ctx.textAlign = "center";
@@ -1691,19 +1701,19 @@
       b.textContent = item.title;
       b.className = (armed == null ? void 0 : armed.kind) === item.kind ? "pal active" : "pal";
       b.onclick = () => {
-        if ((armed == null ? void 0 : armed.kind) === item.kind) {
-          armed = null;
-          setStatus("Place mode off.");
-        } else {
+        const same = (armed == null ? void 0 : armed.kind) === item.kind;
+        if (same) armed = null;
+        else {
           armed = { kind: item.kind };
           selectedId = null;
           selectedWireId = null;
           wireFrom = null;
-          setStatus(`Selected ${item.title} \u2014 click the canvas to place (click again to cancel).`);
+          hideResultTable();
         }
         renderPalette();
         syncRpmPanel();
         draw();
+        if (same && (selectedId || selectedWireId)) focusNameField();
       };
       el.appendChild(b);
     }
@@ -2105,6 +2115,20 @@
     columnOrder[j] = swap;
     renderTruth();
   }
+  function hideResultTable() {
+    if (appMode === "inequalities") {
+      const wrap = document.getElementById("ineqWrap");
+      if (wrap.hidden) return;
+      wrap.hidden = true;
+      syncIneqChrome();
+      resize();
+      return;
+    }
+    if (appMode !== "gears" || !scenarioRows.length || tableClosed) return;
+    tableClosed = true;
+    syncTableChrome();
+    resize();
+  }
   function syncTableChrome() {
     const wrap = document.getElementById("truthWrap");
     const wasHidden = wrap.hidden;
@@ -2346,6 +2370,7 @@
         x: n.x,
         y: n.y,
         label: n.label || "",
+        ...(n.kind === "leq" || n.kind === "geq") && (n.rail === "G" || n.rail === "F") ? { rail: n.rail } : {},
         ...n.kind === "iqInput" ? { values: (Array.isArray(n.values) ? n.values : []).slice(0, ineqCount).map((v) => v == null ? "" : String(v)) } : {}
       })),
       wires: wires.map((w) => ({
@@ -2382,6 +2407,7 @@
         portLabels: {},
         tablePorts: {}
       };
+      if (n.kind === "leq" || n.kind === "geq") made.rail = n.rail === "G" || n.rail === "F" ? n.rail : "";
       if (n.kind === "iqInput") {
         made.values = Array.isArray(n.values) ? n.values.map((v) => v == null ? "" : String(v)) : [];
         ensureIneqValues(made);
@@ -2396,7 +2422,13 @@
       toPort: w.toPort,
       label: typeof w.label === "string" ? w.label : "",
       points: Array.isArray(w.points) ? w.points.map((p) => ({ x: Number(p.x) || 0, y: Number(p.y) || 0 })) : []
-    }));
+    })).filter((w) => {
+      const from = nodes.find((n) => n.id === w.from);
+      const to = nodes.find((n) => n.id === w.to);
+      if (from && (from.rail === "G" || from.rail === "F") && w.fromPort === "left") return false;
+      if (to && (to.rail === "G" || to.rail === "F") && w.toPort === "left") return false;
+      return true;
+    });
     const view = data.view || {};
     panX = Number.isFinite(Number(view.panX)) ? Number(view.panX) : 0;
     panY = Number.isFinite(Number(view.panY)) ? Number(view.panY) : 0;
@@ -2435,6 +2467,144 @@
     }
     if (appMode !== "gears") setAppMode("gears");
     applySnapshot(data);
+  }
+  function diagramShift(incoming) {
+    if (!nodes.length || !incoming.length) return { dx: 0, dy: 0 };
+    let maxX = -Infinity;
+    let minY = Infinity;
+    for (const n of nodes) {
+      maxX = Math.max(maxX, n.x + nodeW(n));
+      minY = Math.min(minY, n.y);
+    }
+    let inMinX = Infinity;
+    let inMinY = Infinity;
+    for (const n of incoming) {
+      inMinX = Math.min(inMinX, Number(n.x) || 0);
+      inMinY = Math.min(inMinY, Number(n.y) || 0);
+    }
+    return { dx: maxX + 64 - inMinX, dy: minY - inMinY };
+  }
+  function freshId(preferred, kind, reserved) {
+    if (typeof preferred === "string" && preferred && !nodes.some((n) => n.id === preferred) && !wires.some((w) => w.id === preferred) && !reserved.has(preferred)) {
+      reserved.add(preferred);
+      return preferred;
+    }
+    let id = `${kind}_${seq++}`;
+    while (nodes.some((n) => n.id === id) || wires.some((w) => w.id === id) || reserved.has(id)) id = `${kind}_${seq++}`;
+    reserved.add(id);
+    return id;
+  }
+  function placeIneq(data) {
+    const kinds = new Set(["iqInput", "iqOutput", "plus", "minus", "leq", "geq"]);
+    if (!data || data.kind !== "inequalities" || !Array.isArray(data.nodes) || !Array.isArray(data.wires)) return false;
+    for (const n of data.nodes) {
+      if (!n || typeof n.id !== "string" || !kinds.has(n.kind)) return false;
+    }
+    const ids = new Set(data.nodes.map((n) => n.id));
+    if (ids.size !== data.nodes.length) return false;
+    for (const w of data.wires) {
+      if (!w || !ids.has(w.from) || !ids.has(w.to)) return false;
+    }
+    const shift = diagramShift(data.nodes);
+    const reserved = /* @__PURE__ */ new Set();
+    const idMap = /* @__PURE__ */ new Map();
+    const madeNodes = data.nodes.map((n) => {
+      const id = freshId(n.id, n.kind, reserved);
+      idMap.set(n.id, id);
+      const made = {
+        id,
+        kind: n.kind,
+        x: (Number(n.x) || 0) + shift.dx,
+        y: (Number(n.y) || 0) + shift.dy,
+        label: typeof n.label === "string" ? n.label : "",
+        portLabels: {},
+        tablePorts: {}
+      };
+      if (n.kind === "leq" || n.kind === "geq") made.rail = n.rail === "G" || n.rail === "F" ? n.rail : "";
+      if (n.kind === "iqInput") {
+        made.values = Array.isArray(n.values) ? n.values.map((v) => v == null ? "" : String(v)) : [];
+        ensureIneqValues(made);
+      }
+      return made;
+    });
+    const madeWires = data.wires.map((w) => ({
+      id: freshId(typeof w.id === "string" ? w.id : "", "w", reserved),
+      from: idMap.get(w.from),
+      fromPort: w.fromPort,
+      to: idMap.get(w.to),
+      toPort: w.toPort,
+      label: typeof w.label === "string" ? w.label : "",
+      points: Array.isArray(w.points) ? w.points.map((p) => ({ x: (Number(p.x) || 0) + shift.dx, y: (Number(p.y) || 0) + shift.dy })) : []
+    })).filter((w) => {
+      const from = madeNodes.find((n) => n.id === w.from);
+      const to = madeNodes.find((n) => n.id === w.to);
+      if (from && (from.rail === "G" || from.rail === "F") && w.fromPort === "left") return false;
+      if (to && (to.rail === "G" || to.rail === "F") && w.toPort === "left") return false;
+      return true;
+    });
+    nodes = nodes.concat(madeNodes);
+    wires = wires.concat(madeWires);
+    draw();
+    return true;
+  }
+  function placeGears(data) {
+    const kinds = new Set(["pgs", "ipgs", "xl", "input"]);
+    const shapes = new Set(["zeros", "ones", "count0", "count1", "count2", "custom"]);
+    if (!data || data.kind !== "shaftlock" || !Array.isArray(data.nodes) || !Array.isArray(data.wires)) return false;
+    for (const n of data.nodes) {
+      if (!n || typeof n.id !== "string" || !kinds.has(n.kind)) return false;
+    }
+    const ids = new Set(data.nodes.map((n) => n.id));
+    if (ids.size !== data.nodes.length) return false;
+    for (const w of data.wires) {
+      if (!w || !ids.has(w.from) || !ids.has(w.to)) return false;
+    }
+    const shift = diagramShift(data.nodes);
+    const reserved = /* @__PURE__ */ new Set();
+    const idMap = /* @__PURE__ */ new Map();
+    const madeNodes = data.nodes.map((n) => {
+      const id = freshId(n.id, n.kind, reserved);
+      idMap.set(n.id, id);
+      const made = {
+        id,
+        kind: n.kind,
+        x: (Number(n.x) || 0) + shift.dx,
+        y: (Number(n.y) || 0) + shift.dy,
+        label: typeof n.label === "string" ? n.label : "",
+        portLabels: n.portLabels && typeof n.portLabels === "object" ? { ...n.portLabels } : {},
+        tablePorts: n.tablePorts && typeof n.tablePorts === "object" ? { ...n.tablePorts } : {}
+      };
+      if (n.kind === "input") {
+        made.shape = shapes.has(n.shape) ? n.shape : "custom";
+        made.series = Array.isArray(n.series) ? n.series.map((v) => Number.isFinite(Number(v)) ? Number(v) : 0) : [];
+        ensureSeries(made);
+        made.rpm = made.series[0] || 0;
+      }
+      return made;
+    });
+    const madeWires = data.wires.map((w) => ({
+      id: freshId(typeof w.id === "string" ? w.id : "", "w", reserved),
+      from: idMap.get(w.from),
+      fromPort: w.fromPort,
+      to: idMap.get(w.to),
+      toPort: w.toPort,
+      points: Array.isArray(w.points) ? w.points.map((p) => ({ x: (Number(p.x) || 0) + shift.dx, y: (Number(p.y) || 0) + shift.dy })) : []
+    }));
+    nodes = nodes.concat(madeNodes);
+    wires = wires.concat(madeWires);
+    draw();
+    return true;
+  }
+  function placeConfig(data) {
+    if (data && data.kind === "inequalities") {
+      if (appMode !== "inequalities") setAppMode("inequalities");
+      placeIneq(data);
+      return;
+    }
+    if (data && data.kind === "shaftlock") {
+      if (appMode !== "gears") setAppMode("gears");
+      placeGears(data);
+    }
   }
   function applySnapshot(data) {
     if (!data || data.kind !== "shaftlock" || !Array.isArray(data.nodes) || !Array.isArray(data.wires)) {
@@ -2668,7 +2838,7 @@
         const out = portSignalName(n.id, "out");
         lines.push(n.kind === "plus" ? `${out} = ${a} + ${b}` : `${out} = ${a} \u2212 ${b}`);
       } else if (n.kind === "leq" || n.kind === "geq") {
-        const left = portSignalName(n.id, "left");
+        const left = n.rail === "G" || n.rail === "F" ? n.rail : portSignalName(n.id, "left");
         const right = portSignalName(n.id, "right");
         lines.push(n.kind === "leq" ? `${left} \u2264 ${right}` : `${left} \u2265 ${right}`);
       }
@@ -2758,11 +2928,10 @@
     const lo = minV.inf === -1 ? null : minV.n;
     const hi = maxV.inf === 1 ? null : maxV.n;
     if (lo == null && hi == null) return "any";
-    if (lo != null && hi != null && Math.abs(lo - hi) < 1e-8) return "=" + fmtNum(lo);
-    const parts = [];
-    if (lo != null) parts.push(">=" + fmtNum(lo));
-    if (hi != null) parts.push("<=" + fmtNum(hi));
-    return parts.join(", ");
+    if (lo != null && hi != null && Math.abs(lo - hi) < 1e-8) return "[" + fmtNum(lo) + "]";
+    if (lo != null && hi != null) return "[" + fmtNum(lo) + "," + fmtNum(hi) + "]";
+    if (lo != null) return "[" + fmtNum(lo) + ", \u221e]";
+    return "[-\u221e, " + fmtNum(hi) + "]";
   }
   async function fillColumnsWithZ3(columns, equations) {
     const unknowns = columns.some((col) => !col.known);
@@ -2994,6 +3163,12 @@
       seenHeads.add(head);
       columns.push({ key: head, head, values, known: !!known });
     };
+    if (nodes.some((n) => (n.kind === "leq" || n.kind === "geq") && n.rail === "G")) {
+      pushCol("G", Array(ineqCount).fill("0"), true);
+    }
+    if (nodes.some((n) => (n.kind === "leq" || n.kind === "geq") && n.rail === "F")) {
+      pushCol("F", Array(ineqCount).fill("1"), true);
+    }
     for (const n of nodes) {
       if (n.kind === "iqInput") pushCol(ineqTrim(n), n.values.slice(), true);
     }
@@ -3047,6 +3222,29 @@
     if (name.dataset.node !== focusId || document.activeElement !== name) {
       name.dataset.node = focusId;
       name.value = target.label || "";
+    }
+    if (node && (node.kind === "leq" || node.kind === "geq")) {
+      const anchorLabel = document.createElement("label");
+      anchorLabel.textContent = "Anchor";
+      const anchor = document.createElement("select");
+      for (const [value, text] of [["", "Inequality"], ["G", "Grounded G"], ["F", "Factory F"]]) {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = text;
+        anchor.appendChild(opt);
+      }
+      anchor.value = node.rail === "G" || node.rail === "F" ? node.rail : "";
+      anchor.addEventListener("change", () => {
+        const rail = anchor.value === "G" || anchor.value === "F" ? anchor.value : "";
+        if (rail) {
+          wires = wires.filter((w) => !((w.from === node.id && w.fromPort === "left") || (w.to === node.id && w.toPort === "left")));
+          if (wireFrom && wireFrom.nodeId === node.id && wireFrom.port === "left") wireFrom = null;
+        }
+        node.rail = rail;
+        draw();
+      });
+      anchorLabel.appendChild(anchor);
+      values.appendChild(anchorLabel);
     }
     if (!(node && node.kind === "iqInput")) return;
     ensureIneqValues(node);
@@ -3433,8 +3631,8 @@
         const maxV = maxStatus === "sat" ? readBound(maxOpt) : { text: "no" };
         release(maxOpt);
         const text = formatZ3Cell(minV, maxV);
-        if (!text.startsWith("=")) return false;
-        if (!searchNearly(Number(text.slice(1)), want)) return false;
+        const exact = String(text).match(/^\[([^,\]]+)\]$/);
+        if (!exact || !searchNearly(Number(exact[1]), want)) return false;
       }
     }
     return true;
@@ -3789,7 +3987,15 @@
   document.getElementById("btnXl").onclick = loadXl;
   document.getElementById("btnClear").onclick = clearAll;
   document.getElementById("btnSave").onclick = saveFile;
-  document.getElementById("btnUpload").onclick = () => document.getElementById("fileUpload").click();
+  var fileAction = "upload";
+  document.getElementById("btnUpload").onclick = () => {
+    fileAction = "upload";
+    document.getElementById("fileUpload").click();
+  };
+  document.getElementById("btnPlace").onclick = () => {
+    fileAction = "place";
+    document.getElementById("fileUpload").click();
+  };
   document.getElementById("fileUpload").addEventListener("change", () => {
     const input = document.getElementById("fileUpload");
     const file = input.files && input.files[0];
@@ -3798,7 +4004,9 @@
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        openConfig(JSON.parse(String(reader.result)));
+        const data = JSON.parse(String(reader.result));
+        if (fileAction === "place") placeConfig(data);
+        else openConfig(data);
       } catch (e) {
         setStatus("That file is not valid JSON.", true);
       }
