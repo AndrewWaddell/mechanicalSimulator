@@ -2368,7 +2368,10 @@
         y: n.y,
         label: n.label || "",
         ...(n.kind === "leq" || n.kind === "geq") && (n.rail === "G" || n.rail === "F") ? { rail: n.rail } : {},
-        ...n.kind === "iqInput" ? { values: (Array.isArray(n.values) ? n.values : []).slice(0, ineqCount).map((v) => v == null ? "" : String(v)) } : {}
+        ...n.kind === "iqInput" ? {
+          values: (Array.isArray(n.values) ? n.values : []).slice(0, ineqCount).map((v) => v == null ? "" : String(v)),
+          ...n.pattern === "binary" ? { pattern: "binary", bit: Math.max(0, Math.round(Number(n.bit)) || 0) } : {}
+        } : {}
       })),
       wires: wires.map((w) => ({
         id: w.id,
@@ -2407,6 +2410,8 @@
       if (n.kind === "leq" || n.kind === "geq") made.rail = n.rail === "G" || n.rail === "F" ? n.rail : "";
       if (n.kind === "iqInput") {
         made.values = Array.isArray(n.values) ? n.values.map((v) => v == null ? "" : String(v)) : [];
+        made.pattern = n.pattern === "binary" ? "binary" : "";
+        made.bit = Math.max(0, Math.round(Number(n.bit)) || 0);
         ensureIneqValues(made);
       }
       return made;
@@ -2434,6 +2439,7 @@
     seq = 1;
     for (const n of nodes) bumpSeq(n.id);
     for (const w of wires) bumpSeq(w.id);
+    refreshIneqInputs();
     armed = null;
     selectedId = null;
     selectedWireId = null;
@@ -2520,6 +2526,8 @@
       if (n.kind === "leq" || n.kind === "geq") made.rail = n.rail === "G" || n.rail === "F" ? n.rail : "";
       if (n.kind === "iqInput") {
         made.values = Array.isArray(n.values) ? n.values.map((v) => v == null ? "" : String(v)) : [];
+        made.pattern = n.pattern === "binary" ? "binary" : "";
+        made.bit = Math.max(0, Math.round(Number(n.bit)) || 0);
         ensureIneqValues(made);
       }
       return made;
@@ -2541,6 +2549,7 @@
     });
     nodes = nodes.concat(madeNodes);
     wires = wires.concat(madeWires);
+    refreshIneqInputs();
     draw();
     return true;
   }
@@ -2704,6 +2713,38 @@
     const next = Array.isArray(n.values) ? n.values.slice(0, ineqCount) : [];
     while (next.length < ineqCount) next.push("");
     n.values = next.map((v) => v == null ? "" : String(v));
+  }
+  function applyIneqInputPattern(n) {
+    if (!n || n.kind !== "iqInput") return;
+    ensureIneqValues(n);
+    if (ineqTrim(n) === "F") {
+      n.pattern = "ones";
+      n.values = Array(ineqCount).fill("1");
+      return;
+    }
+    if (n.pattern === "ones") n.pattern = "";
+    if (n.pattern !== "binary") return;
+    const bit = Math.max(0, Math.round(Number(n.bit)) || 0);
+    n.bit = bit;
+    n.values = Array.from({ length: ineqCount }, (_, i) => String(Math.floor(i / 2 ** bit) % 2));
+  }
+  function spreadIneqInput(n) {
+    applyIneqInputPattern(n);
+    for (const other of signalMembers(n).blocks) {
+      if (other.kind !== "iqInput" || other === n) continue;
+      other.pattern = n.pattern === "binary" || n.pattern === "ones" ? n.pattern : "";
+      other.bit = n.bit || 0;
+      other.values = n.values.slice();
+    }
+  }
+  function refreshIneqInputs() {
+    const seen = /* @__PURE__ */ new Set();
+    for (const n of nodes) {
+      if (n.kind !== "iqInput" || seen.has(n.id)) continue;
+      spreadIneqInput(n);
+      seen.add(n.id);
+      for (const other of signalMembers(n).blocks) if (other.kind === "iqInput") seen.add(other.id);
+    }
   }
   function ineqTrim(item) {
     return String(item && item.label || "").trim();
@@ -3148,6 +3189,7 @@
     runButton.textContent = "Solving\u2026";
     try {
     assignTempNames();
+    refreshIneqInputs();
     defaultInputZeros();
     const nameInput = document.getElementById("ineqName");
     nameInput.dataset.node = "";
@@ -3220,6 +3262,7 @@
       name.dataset.node = focusId;
       name.value = target.label || "";
     }
+    name.dataset.locked = node && node.kind === "iqInput" && ineqTrim(node) === "F" ? "1" : "";
     if (node && (node.kind === "leq" || node.kind === "geq")) {
       const anchorLabel = document.createElement("label");
       anchorLabel.textContent = "Anchor";
@@ -3244,21 +3287,59 @@
       values.appendChild(anchorLabel);
     }
     if (!(node && node.kind === "iqInput")) return;
-    ensureIneqValues(node);
+    spreadIneqInput(node);
+    const locked = ineqTrim(node) === "F";
+    if (!locked) {
+      const modeLabel = document.createElement("label");
+      modeLabel.textContent = "Pattern";
+      const mode = document.createElement("select");
+      for (const [value, text] of [["", "Manual"], ["binary", "Binary"]]) {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = text;
+        mode.appendChild(opt);
+      }
+      mode.value = node.pattern === "binary" ? "binary" : "";
+      mode.addEventListener("change", () => {
+        node.pattern = mode.value === "binary" ? "binary" : "";
+        if (node.pattern === "binary" && !Number.isFinite(Number(node.bit))) node.bit = 0;
+        spreadIneqInput(node);
+        syncIneqPanel();
+      });
+      modeLabel.appendChild(mode);
+      values.appendChild(modeLabel);
+      if (node.pattern === "binary") {
+        const bitLabel = document.createElement("label");
+        bitLabel.textContent = "Bit";
+        const bit = document.createElement("input");
+        bit.type = "number";
+        bit.min = "0";
+        bit.step = "1";
+        bit.value = String(node.bit || 0);
+        bit.addEventListener("input", () => {
+          node.bit = Math.max(0, Math.round(Number(bit.value)) || 0);
+          spreadIneqInput(node);
+          values.querySelectorAll("input[data-scenario]").forEach((field) => {
+            field.value = node.values[Number(field.dataset.scenario)];
+          });
+        });
+        bitLabel.appendChild(bit);
+        values.appendChild(bitLabel);
+      }
+    }
     node.values.forEach((value, i) => {
       const label = document.createElement("label");
       label.textContent = `Scenario ${i + 1}`;
       const field = document.createElement("input");
       field.type = "number";
       field.step = "any";
+      field.dataset.scenario = String(i);
       field.value = value;
+      field.disabled = locked || node.pattern === "binary";
       field.addEventListener("input", () => {
+        node.pattern = "";
         node.values[i] = field.value;
-        for (const other of signalMembers(node).blocks) {
-          if (other.kind !== "iqInput" || other === node) continue;
-          ensureIneqValues(other);
-          other.values[i] = field.value;
-        }
+        spreadIneqInput(node);
       });
       label.appendChild(field);
       values.appendChild(label);
@@ -3962,7 +4043,8 @@
     const v = Math.round(Number(document.getElementById("ineqCount").value));
     ineqCount = Math.min(16, Math.max(1, Number.isFinite(v) ? v : 1));
     document.getElementById("ineqCount").value = String(ineqCount);
-    for (const n of nodes) if (n.kind === "iqInput") ensureIneqValues(n);
+    refreshIneqInputs();
+    syncIneqPanel();
   });
   document.getElementById("ineqName").addEventListener("input", () => {
     const node = nodes.find((n) => n.id === selectedId);
@@ -3970,8 +4052,16 @@
     const target = node || wire;
     if (!target) return;
     const value = document.getElementById("ineqName").value;
+    const name = document.getElementById("ineqName");
     if (wire || node && isIneqEndpoint(node)) applySignalName(target, value);
     else target.label = value;
+    if (node && node.kind === "iqInput") {
+      const wasLocked = name.dataset.locked === "1";
+      spreadIneqInput(node);
+      const locked = ineqTrim(node) === "F";
+      name.dataset.locked = locked ? "1" : "";
+      if (wasLocked !== locked) syncIneqPanel();
+    }
     draw();
   });
   document.getElementById("btnHideIneq").onclick = () => {
