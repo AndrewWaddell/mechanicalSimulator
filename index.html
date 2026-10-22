@@ -111,7 +111,7 @@
   #searchTable { border-collapse: collapse; font-size: 13px; }
   #searchTable th, #searchTable td { border: 1px solid #9aafbf; padding: 6px; vertical-align: top; background: var(--paper); }
   #searchTable th { background: #e7eef3; }
-  #searchTable input, #searchTable select { width: 96px; height: 26px; margin: 0; }
+  #searchTable input, #searchTable select { width: 120px; height: 26px; margin: 0; }
   #searchTable select.role { display: block; width: 112px; margin-top: 4px; }
   #searchTable button { height: 22px; margin-top: 4px; padding: 0 8px; }
   #searchEquations { font: 16px/1.7 Figtree, system-ui, sans-serif; }
@@ -216,7 +216,7 @@
       <button type="button" id="btnSearchAddCol">Add variable</button>
       <button type="button" id="btnSearchAddRow">Add scenario</button>
     </div>
-    <p class="hint">This does not use the diagram. Columns are variables and rows are scenarios. Given is a number the equations can use. Required is a number they have to force exactly, so that cell comes out as = that value. Search tries shorter lists first. When those columns are not enough, it adds variables such as t1 and stops at the first list that works.</p>
+    <p class="hint">This does not use the diagram. Columns are variables and rows are scenarios. Given is a number the equations can use. Required can be an exact number, or an inequality such as &gt;=0, &lt;=1, or &gt;=0, &lt;=1. Search tries shorter lists first and stops at the first one that forces those cells. When the columns are not enough, it adds variables such as t1.</p>
     <progress id="searchProgress" value="0" max="1"></progress>
     <div id="searchMeta">Idle</div>
     <div><table id="searchTable"></table></div>
@@ -3422,11 +3422,52 @@
     for (let i = 0; i < n; i++) if (index[i] < 0) dfs(i);
     return comps;
   }
+  function searchSpec(raw) {
+    const text = String(raw == null ? "" : raw).trim().replace(/\u2265/g, ">=").replace(/\u2264/g, "<=").replace(/\s+/g, "");
+    if (!text) return null;
+    const num = "(?:[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+))";
+    if (new RegExp("^" + num + "$").test(text)) return { kind: "eq", value: Number(text) };
+    const single = text.match(new RegExp("^\\[(" + num + ")\\]$"));
+    if (single) return { kind: "eq", value: Number(single[1]) };
+    const boxed = text.match(new RegExp("^\\[(" + num + "),(" + num + ")\\]$"));
+    if (boxed) return { kind: "range", lo: Number(boxed[1]), hi: Number(boxed[2]) };
+    const geLe = text.match(new RegExp("^>=(" + num + "),<=(" + num + ")$"));
+    if (geLe) return { kind: "range", lo: Number(geLe[1]), hi: Number(geLe[2]) };
+    const leGe = text.match(new RegExp("^<=(" + num + "),>=(" + num + ")$"));
+    if (leGe) return { kind: "range", lo: Number(leGe[2]), hi: Number(leGe[1]) };
+    const ge = text.match(new RegExp("^>=(" + num + ")$"));
+    if (ge) return { kind: "ge", value: Number(ge[1]) };
+    const le = text.match(new RegExp("^<=(" + num + ")$"));
+    if (le) return { kind: "le", value: Number(le[1]) };
+    return { invalid: true };
+  }
   function searchCell(row, col) {
-    const raw = row.values[col.id];
-    if (raw == null || String(raw).trim() === "") return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : null;
+    const spec = searchSpec(row.values[col.id]);
+    if (!spec || spec.invalid || spec.kind !== "eq") return null;
+    return spec.value;
+  }
+  function searchSpecHolds(lo, hi, spec) {
+    const fin = (value) => Number.isFinite(value);
+    if (!spec || spec.invalid) return false;
+    if (spec.kind === "eq") return fin(lo) && fin(hi) && searchNearly(lo, spec.value) && searchNearly(hi, spec.value);
+    if (spec.kind === "ge") return fin(lo) && !fin(hi) && searchNearly(lo, spec.value);
+    if (spec.kind === "le") return fin(hi) && !fin(lo) && searchNearly(hi, spec.value);
+    if (searchNearly(spec.lo, spec.hi)) return fin(lo) && fin(hi) && searchNearly(lo, spec.lo) && searchNearly(hi, spec.lo);
+    return fin(lo) && fin(hi) && searchNearly(lo, spec.lo) && searchNearly(hi, spec.hi);
+  }
+  function searchTextHolds(text, spec) {
+    const exact = String(text).match(/^\[([^,\]]+)\]$/);
+    const range = String(text).match(/^\[([^,\]]+),\s*([^,\]]+)\]$/);
+    let lo = null;
+    let hi = null;
+    if (exact) lo = hi = Number(exact[1]);
+    else if (range) {
+      const left = range[1].trim();
+      const right = range[2].trim();
+      lo = left === "-\u221e" ? -Infinity : Number(left);
+      hi = right === "\u221e" ? Infinity : Number(right);
+    } else return false;
+    return searchSpecHolds(lo, hi, spec);
   }
   function searchAtomAgrees(atom, cols, rows) {
     const byName = new Map(cols.map((col) => [col.name, col]));
@@ -3459,11 +3500,17 @@
     const role = new Map(cols.map((col) => [col.name, col.role]));
     const given = (name) => role.get(name) === "given";
     const atoms = [];
+    const boundWanted = cols.some((col) => col.role === "required" && rows.some((row) => {
+      const spec = searchSpec(row.values[col.id]);
+      return spec && !spec.invalid && spec.kind !== "eq";
+    }));
     const push = (atom) => {
       const check = searchAtomAgrees(atom, cols, rows);
-      if (!check.ok || check.seen === 0) return;
+      if (!check.ok) return;
+      if (check.seen === 0 && atom.op !== "le") return;
+      if (check.seen === 0 && role.get(atom.a) !== "required" && role.get(atom.b) !== "required" && role.get(atom.out) !== "required") return;
       let score = check.seen;
-      if (atom.op === "le") score += 1;
+      if (atom.op === "le") score += role.get(atom.a) === "required" || role.get(atom.b) === "required" ? 400 : 1;
       else {
         score += 1000;
         if (role.get(atom.out) === "required") score += 200;
@@ -3479,13 +3526,38 @@
       }
     }
     for (const a of names) for (const b of names) if (a !== b) push({ op: "le", a, b });
+    if (boundWanted) {
+      const taken = new Set(names);
+      let zeroN = 1;
+      for (const g of names.filter((name) => given(name))) {
+        let zero = "z" + zeroN;
+        while (taken.has(zero)) { zeroN += 1; zero = "z" + zeroN; }
+        taken.add(zero);
+        zeroN += 1;
+        atoms.push({ op: "sub", out: zero, a: g, b: g, score: 450 });
+        for (const required of names.filter((name) => role.get(name) === "required")) {
+          atoms.push({ op: "le", a: zero, b: required, score: 440 });
+          atoms.push({ op: "le", a: required, b: zero, score: 440 });
+        }
+      }
+    }
     atoms.sort((p, q) => q.score - p.score || p.op.localeCompare(q.op));
     const eqs = atoms.filter((atom) => atom.op !== "le").slice(0, 48);
     const ineq = atoms.filter((atom) => atom.op === "le").slice(0, 16);
+    for (const atom of atoms) {
+      if (atom.score < 440) continue;
+      const bucket = atom.op === "le" ? ineq : eqs;
+      if (!bucket.includes(atom)) bucket.push(atom);
+    }
     return eqs.concat(ineq);
   }
   function searchForces(atoms, cols, rows) {
     const names = cols.map((col) => col.name);
+    for (const atom of atoms) {
+      for (const name of [atom.out, atom.a, atom.b]) {
+        if (name && !names.includes(name)) names.push(name);
+      }
+    }
     const index = new Map(names.map((name, i) => [name, i]));
     const n = names.length;
     for (const row of rows) {
@@ -3514,28 +3586,43 @@
           addEq(coeff, 0);
         }
       }
+      const lo = Array(n).fill(-Infinity);
+      const hi = Array(n).fill(Infinity);
       for (const col of cols) {
         if (col.role !== "given") continue;
         const value = searchCell(row, col);
         if (value == null) continue;
+        const at = index.get(col.name);
+        lo[at] = hi[at] = value;
         const coeff = Array(n).fill(0);
-        coeff[index.get(col.name)] = 1;
+        coeff[at] = 1;
         addEq(coeff, value);
       }
       const solved = searchSolve(equations, n);
       if (!solved) return false;
+      for (let i = 0; i < n; i++) {
+        if (solved[i] == null) continue;
+        if (solved[i] < lo[i] - 1e-6 || solved[i] > hi[i] + 1e-6) return false;
+        lo[i] = hi[i] = solved[i];
+      }
+      let changed = true;
+      for (let guard = 0; changed && guard < n * n + 4; guard++) {
+        changed = false;
+        for (const atom of atoms) {
+          if (atom.op !== "le") continue;
+          const a = index.get(atom.a);
+          const b = index.get(atom.b);
+          if (hi[a] > hi[b]) { hi[a] = hi[b]; changed = true; }
+          if (lo[b] < lo[a]) { lo[b] = lo[a]; changed = true; }
+          if (lo[a] > hi[a] + 1e-6 || lo[b] > hi[b] + 1e-6) return false;
+        }
+      }
       for (const col of cols) {
         if (col.role !== "required") continue;
-        const want = searchCell(row, col);
-        if (want == null) continue;
-        const got = solved[index.get(col.name)];
-        if (got == null || !searchNearly(got, want)) return false;
-      }
-      for (const atom of atoms) {
-        if (atom.op !== "le") continue;
-        const a = solved[index.get(atom.a)];
-        const b = solved[index.get(atom.b)];
-        if (a != null && b != null && a > b + 1e-6) return false;
+        const spec = searchSpec(row.values[col.id]);
+        if (!spec) continue;
+        const at = index.get(col.name);
+        if (!searchSpecHolds(lo[at], hi[at], spec)) return false;
       }
     }
     return true;
@@ -3576,7 +3663,10 @@
       }
       role.value = col.role;
       role.setAttribute("aria-label", "Column kind");
-      role.addEventListener("change", () => { col.role = role.value; });
+      role.addEventListener("change", () => {
+        col.role = role.value;
+        renderSearchTable();
+      });
       const remove = document.createElement("button");
       remove.type = "button";
       remove.textContent = "Remove";
@@ -3609,8 +3699,9 @@
       for (const col of searchCols) {
         const cell = document.createElement("td");
         const field = document.createElement("input");
-        field.type = "number";
-        field.step = "any";
+        field.type = col.role === "required" ? "text" : "number";
+        if (col.role === "required") field.placeholder = ">=0";
+        else field.step = "any";
         field.value = row.values[col.id] == null ? "" : row.values[col.id];
         field.setAttribute("aria-label", `Scenario ${index + 1} ${col.name}`);
         field.addEventListener("input", () => { row.values[col.id] = field.value; });
@@ -3693,8 +3784,8 @@
       if (status !== "sat") return false;
       for (const col of cols) {
         if (col.role !== "required") continue;
-        const want = searchCell(row, col);
-        if (want == null) continue;
+        const spec = searchSpec(row.values[col.id]);
+        if (!spec || spec.invalid) continue;
         const expr = variable(col.name);
         const minOpt = new Optimize();
         assertAll(minOpt);
@@ -3708,9 +3799,7 @@
         const maxStatus = await maxOpt.check();
         const maxV = maxStatus === "sat" ? readBound(maxOpt) : { text: "no" };
         release(maxOpt);
-        const text = formatZ3Cell(minV, maxV);
-        const exact = String(text).match(/^\[([^,\]]+)\]$/);
-        if (!exact || !searchNearly(Number(exact[1]), want)) return false;
+        if (!searchTextHolds(formatZ3Cell(minV, maxV), spec)) return false;
       }
     }
     return true;
@@ -3846,17 +3935,23 @@
       meta.textContent = "Names cannot contain =, +, -, \u2212, \u2264, or \u2265.";
       return;
     }
-    const requiredFilled = cols.some((col) => col.role === "required" && rows.some((row) => searchCell(row, col) != null));
+    const requiredFilled = cols.some((col) => col.role === "required" && rows.some((row) => {
+      const spec = searchSpec(row.values[col.id]);
+      return spec && !spec.invalid;
+    }));
     if (!requiredFilled) {
-      meta.textContent = "Type a number in a Required column. That is the value the equations have to hit exactly.";
+      meta.textContent = "Type a number or an inequality, such as >=0, in a Required column.";
       return;
     }
     for (const row of rows) {
       for (const col of cols) {
         const raw = row.values[col.id];
         if (raw == null || String(raw).trim() === "") continue;
-        if (searchCell(row, col) == null) {
-          meta.textContent = "Scenario cells need to be numbers, or left blank.";
+        const spec = searchSpec(raw);
+        if (!spec || spec.invalid || (col.role === "given" && spec.kind !== "eq")) {
+          meta.textContent = col.role === "given"
+            ? "Given cells need to be numbers, or left blank."
+            : "Required cells need a number, >=, <=, or a range like >=0, <=1.";
           return;
         }
       }
