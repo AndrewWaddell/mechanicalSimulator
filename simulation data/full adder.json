@@ -1,0 +1,1313 @@
+{
+  "kind": "inequalities",
+  "version": 1,
+  "scenarioCount": 8,
+  "view": {
+    "panX": -641.1288779744092,
+    "panY": -287.07629180429296,
+    "zoom": 0.48734643170689546
+  },
+  "nodes": [
+    {
+      "id": "iqInput_42",
+      "kind": "iqInput",
+      "x": 512.4925522568111,
+      "y": 809.8431611100432,
+      "label": "A",
+      "values": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "1",
+        "1",
+        "1",
+        "1"
+      ],
+      "pattern": "binary",
+      "bit": 2
+    },
+    {
+      "id": "iqInput_43",
+      "kind": "iqInput",
+      "x": 512.4925522568111,
+      "y": 1088.9378992353186,
+      "label": "B",
+      "values": [
+        "0",
+        "0",
+        "1",
+        "1",
+        "0",
+        "0",
+        "1",
+        "1"
+      ],
+      "pattern": "binary",
+      "bit": 1
+    },
+    {
+      "id": "iqInput_44",
+      "kind": "iqInput",
+      "x": 509.8692603712957,
+      "y": 946.2543391568446,
+      "label": "F",
+      "values": [
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1"
+      ]
+    },
+    {
+      "id": "minus_45",
+      "kind": "minus",
+      "x": 661.2667735022204,
+      "y": 1011.8366362947299,
+      "label": ""
+    },
+    {
+      "id": "minus_46",
+      "kind": "minus",
+      "x": 669.1366491587667,
+      "y": 880.6720420189592,
+      "label": ""
+    },
+    {
+      "id": "minus_52",
+      "kind": "minus",
+      "x": 959.861338634267,
+      "y": 819.8359196313829,
+      "label": ""
+    },
+    {
+      "id": "minus_53",
+      "kind": "minus",
+      "x": 959.861338634267,
+      "y": 933.4892919074895,
+      "label": ""
+    },
+    {
+      "id": "minus_54",
+      "kind": "minus",
+      "x": 959.861338634267,
+      "y": 1055.0984002429234,
+      "label": ""
+    },
+    {
+      "id": "leq_61",
+      "kind": "leq",
+      "x": 1132.3840949905523,
+      "y": 1042.9272816332493,
+      "label": ""
+    },
+    {
+      "id": "leq_62",
+      "kind": "leq",
+      "x": 1132.088070350486,
+      "y": 905.3453213058098,
+      "label": ""
+    },
+    {
+      "id": "leq_63",
+      "kind": "leq",
+      "x": 1129.9650227850636,
+      "y": 765.5668073473628,
+      "label": ""
+    },
+    {
+      "id": "leq_67",
+      "kind": "leq",
+      "x": 1130.6375132686196,
+      "y": 835.6784111007171,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "leq_68",
+      "kind": "leq",
+      "x": 1132.2747300941405,
+      "y": 974.8418412699808,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "leq_69",
+      "kind": "leq",
+      "x": 1132.2747300941403,
+      "y": 1112.368054613724,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "minus_70",
+      "kind": "minus",
+      "x": 1300.9174482035057,
+      "y": 745.6314856970758,
+      "label": ""
+    },
+    {
+      "id": "minus_71",
+      "kind": "minus",
+      "x": 1300.917448203506,
+      "y": 909.3531682491509,
+      "label": ""
+    },
+    {
+      "id": "minus_72",
+      "kind": "minus",
+      "x": 1300.9174482035053,
+      "y": 1073.074850801226,
+      "label": ""
+    },
+    {
+      "id": "leq_82",
+      "kind": "leq",
+      "x": 1320.5546650290264,
+      "y": 840.5900615772794,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "leq_83",
+      "kind": "leq",
+      "x": 1317.2802313779848,
+      "y": 1004.3117441293545,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "leq_84",
+      "kind": "leq",
+      "x": 1317.280231377985,
+      "y": 1168.0334266814293,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "plus_106",
+      "kind": "plus",
+      "x": 1657.830716167029,
+      "y": 956.8324561892528,
+      "label": ""
+    },
+    {
+      "id": "iqInput_115",
+      "kind": "iqInput",
+      "x": 2005.4501242556612,
+      "y": 1088.9378992353186,
+      "label": "Cin",
+      "values": [
+        "0",
+        "1",
+        "0",
+        "1",
+        "0",
+        "1",
+        "0",
+        "1"
+      ],
+      "pattern": "binary",
+      "bit": 0
+    },
+    {
+      "id": "iqInput_116",
+      "kind": "iqInput",
+      "x": 2002.826832370146,
+      "y": 946.2543391568446,
+      "label": "F2",
+      "values": [
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1"
+      ]
+    },
+    {
+      "id": "minus_117",
+      "kind": "minus",
+      "x": 2154.2243455010707,
+      "y": 1011.8366362947299,
+      "label": ""
+    },
+    {
+      "id": "minus_118",
+      "kind": "minus",
+      "x": 2162.0942211576166,
+      "y": 880.6720420189592,
+      "label": ""
+    },
+    {
+      "id": "minus_119",
+      "kind": "minus",
+      "x": 2452.8189106331174,
+      "y": 819.8359196313829,
+      "label": ""
+    },
+    {
+      "id": "minus_120",
+      "kind": "minus",
+      "x": 2452.8189106331174,
+      "y": 933.4892919074895,
+      "label": ""
+    },
+    {
+      "id": "minus_121",
+      "kind": "minus",
+      "x": 2452.8189106331174,
+      "y": 1055.0984002429234,
+      "label": ""
+    },
+    {
+      "id": "leq_122",
+      "kind": "leq",
+      "x": 2625.3416669894023,
+      "y": 1042.9272816332493,
+      "label": ""
+    },
+    {
+      "id": "leq_123",
+      "kind": "leq",
+      "x": 2625.045642349336,
+      "y": 905.3453213058098,
+      "label": ""
+    },
+    {
+      "id": "leq_124",
+      "kind": "leq",
+      "x": 2622.922594783914,
+      "y": 765.5668073473628,
+      "label": ""
+    },
+    {
+      "id": "leq_125",
+      "kind": "leq",
+      "x": 2623.5950852674696,
+      "y": 835.6784111007171,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "leq_126",
+      "kind": "leq",
+      "x": 2625.2323020929907,
+      "y": 974.8418412699808,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "leq_127",
+      "kind": "leq",
+      "x": 2625.2323020929907,
+      "y": 1112.368054613724,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "minus_128",
+      "kind": "minus",
+      "x": 2793.8750202023557,
+      "y": 745.6314856970758,
+      "label": ""
+    },
+    {
+      "id": "minus_129",
+      "kind": "minus",
+      "x": 2793.875020202356,
+      "y": 909.3531682491509,
+      "label": ""
+    },
+    {
+      "id": "minus_130",
+      "kind": "minus",
+      "x": 2793.8750202023557,
+      "y": 1073.074850801226,
+      "label": ""
+    },
+    {
+      "id": "leq_131",
+      "kind": "leq",
+      "x": 2813.512237027877,
+      "y": 840.5900615772794,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "leq_132",
+      "kind": "leq",
+      "x": 2810.237803376835,
+      "y": 1004.3117441293545,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "leq_133",
+      "kind": "leq",
+      "x": 2810.2378033768355,
+      "y": 1168.0334266814293,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "plus_135",
+      "kind": "plus",
+      "x": 3150.7882881658793,
+      "y": 956.8324561892528,
+      "label": ""
+    },
+    {
+      "id": "iqOutput_136",
+      "kind": "iqOutput",
+      "x": 3323.784404368996,
+      "y": 969.9301907934187,
+      "label": "Sum"
+    },
+    {
+      "id": "iqInput_220",
+      "kind": "iqInput",
+      "x": 3495.784404368996,
+      "y": 946.2543391568446,
+      "label": "F3",
+      "values": [
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1"
+      ]
+    },
+    {
+      "id": "minus_221",
+      "kind": "minus",
+      "x": 3647.181917499921,
+      "y": 1011.8366362947299,
+      "label": ""
+    },
+    {
+      "id": "minus_222",
+      "kind": "minus",
+      "x": 3655.0517931564673,
+      "y": 880.6720420189592,
+      "label": ""
+    },
+    {
+      "id": "minus_223",
+      "kind": "minus",
+      "x": 3945.776482631967,
+      "y": 819.8359196313829,
+      "label": ""
+    },
+    {
+      "id": "minus_225",
+      "kind": "minus",
+      "x": 3945.776482631967,
+      "y": 1055.0984002429234,
+      "label": ""
+    },
+    {
+      "id": "leq_226",
+      "kind": "leq",
+      "x": 4118.299238988253,
+      "y": 1042.9272816332493,
+      "label": ""
+    },
+    {
+      "id": "leq_228",
+      "kind": "leq",
+      "x": 4115.880166782764,
+      "y": 765.5668073473628,
+      "label": ""
+    },
+    {
+      "id": "leq_229",
+      "kind": "leq",
+      "x": 4116.55265726632,
+      "y": 835.6784111007171,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "leq_231",
+      "kind": "leq",
+      "x": 4118.1898740918405,
+      "y": 1112.368054613724,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "minus_232",
+      "kind": "minus",
+      "x": 4286.832592201206,
+      "y": 745.6314856970758,
+      "label": ""
+    },
+    {
+      "id": "minus_234",
+      "kind": "minus",
+      "x": 4286.832592201205,
+      "y": 1073.074850801226,
+      "label": ""
+    },
+    {
+      "id": "leq_235",
+      "kind": "leq",
+      "x": 4306.469809026727,
+      "y": 840.5900615772794,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "leq_237",
+      "kind": "leq",
+      "x": 4303.195375375685,
+      "y": 1168.0334266814293,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "plus_238",
+      "kind": "plus",
+      "x": 4643.7458601647295,
+      "y": 956.8324561892528,
+      "label": ""
+    },
+    {
+      "id": "iqOutput_112",
+      "kind": "iqOutput",
+      "x": 4816.741976367846,
+      "y": 969.9301907934187,
+      "label": "Carry"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w47",
+      "from": "iqInput_44",
+      "fromPort": "io",
+      "to": "minus_46",
+      "toPort": "a",
+      "label": "F",
+      "points": []
+    },
+    {
+      "id": "w48",
+      "from": "iqInput_44",
+      "fromPort": "io",
+      "to": "minus_45",
+      "toPort": "a",
+      "label": "F",
+      "points": []
+    },
+    {
+      "id": "w50",
+      "from": "iqInput_43",
+      "fromPort": "io",
+      "to": "minus_45",
+      "toPort": "b",
+      "label": "B",
+      "points": []
+    },
+    {
+      "id": "w51",
+      "from": "minus_46",
+      "fromPort": "b",
+      "to": "iqInput_42",
+      "toPort": "io",
+      "label": "A",
+      "points": []
+    },
+    {
+      "id": "w55",
+      "from": "iqInput_42",
+      "fromPort": "io",
+      "to": "minus_52",
+      "toPort": "a",
+      "label": "A",
+      "points": []
+    },
+    {
+      "id": "w56",
+      "from": "iqInput_43",
+      "fromPort": "io",
+      "to": "minus_54",
+      "toPort": "b",
+      "label": "B",
+      "points": []
+    },
+    {
+      "id": "w57",
+      "from": "minus_52",
+      "fromPort": "a",
+      "to": "minus_53",
+      "toPort": "a",
+      "label": "A",
+      "points": [
+        {
+          "x": 883.4772919029391,
+          "y": 862.5665940866041
+        }
+      ]
+    },
+    {
+      "id": "w58",
+      "from": "minus_54",
+      "fromPort": "b",
+      "to": "minus_53",
+      "toPort": "b",
+      "label": "B",
+      "points": [
+        {
+          "x": 883.4772919029391,
+          "y": 1102.3752095891891
+        }
+      ]
+    },
+    {
+      "id": "w59",
+      "from": "minus_46",
+      "fromPort": "out",
+      "to": "minus_54",
+      "toPort": "a",
+      "label": "nA",
+      "points": []
+    },
+    {
+      "id": "w60",
+      "from": "minus_45",
+      "fromPort": "out",
+      "to": "minus_52",
+      "toPort": "b",
+      "label": "nB",
+      "points": []
+    },
+    {
+      "id": "w64",
+      "from": "minus_54",
+      "fromPort": "out",
+      "to": "leq_61",
+      "toPort": "left",
+      "label": "nAB",
+      "points": []
+    },
+    {
+      "id": "w65",
+      "from": "leq_62",
+      "fromPort": "left",
+      "to": "minus_53",
+      "toPort": "out",
+      "label": "AB",
+      "points": []
+    },
+    {
+      "id": "w66",
+      "from": "leq_63",
+      "fromPort": "left",
+      "to": "minus_52",
+      "toPort": "out",
+      "label": "AnB",
+      "points": []
+    },
+    {
+      "id": "w73",
+      "from": "leq_67",
+      "fromPort": "right",
+      "to": "minus_70",
+      "toPort": "b",
+      "label": "eAnB",
+      "points": []
+    },
+    {
+      "id": "w74",
+      "from": "minus_70",
+      "fromPort": "b",
+      "to": "leq_63",
+      "toPort": "right",
+      "label": "eAnB",
+      "points": []
+    },
+    {
+      "id": "w75",
+      "from": "leq_62",
+      "fromPort": "right",
+      "to": "minus_71",
+      "toPort": "b",
+      "label": "eAB",
+      "points": []
+    },
+    {
+      "id": "w76",
+      "from": "minus_71",
+      "fromPort": "b",
+      "to": "leq_68",
+      "toPort": "right",
+      "label": "eAB",
+      "points": []
+    },
+    {
+      "id": "w77",
+      "from": "leq_61",
+      "fromPort": "right",
+      "to": "minus_72",
+      "toPort": "b",
+      "label": "enAB",
+      "points": []
+    },
+    {
+      "id": "w78",
+      "from": "minus_72",
+      "fromPort": "b",
+      "to": "leq_69",
+      "toPort": "right",
+      "label": "enAB",
+      "points": []
+    },
+    {
+      "id": "w79",
+      "from": "iqInput_42",
+      "fromPort": "io",
+      "to": "minus_70",
+      "toPort": "a",
+      "label": "A",
+      "points": [
+        {
+          "x": 665.1002973571873,
+          "y": 713.2405472804119
+        },
+        {
+          "x": 1234.851752638408,
+          "y": 718.1521977569741
+        }
+      ]
+    },
+    {
+      "id": "w80",
+      "from": "iqInput_42",
+      "fromPort": "io",
+      "to": "minus_71",
+      "toPort": "a",
+      "label": "A",
+      "points": [
+        {
+          "x": 688.0213329144777,
+          "y": 741.0732333142647
+        },
+        {
+          "x": 1211.9307170811176,
+          "y": 742.7104501397854
+        }
+      ]
+    },
+    {
+      "id": "w81",
+      "from": "minus_46",
+      "fromPort": "out",
+      "to": "minus_72",
+      "toPort": "a",
+      "label": "nA",
+      "points": [
+        {
+          "x": 892.6734361045714,
+          "y": 1215.866112715282
+        },
+        {
+          "x": 1239.7634031149703,
+          "y": 1222.414980017365
+        }
+      ]
+    },
+    {
+      "id": "w107",
+      "from": "plus_106",
+      "fromPort": "a",
+      "to": "minus_70",
+      "toPort": "out",
+      "label": "XL",
+      "points": []
+    },
+    {
+      "id": "w109",
+      "from": "leq_82",
+      "fromPort": "right",
+      "to": "plus_106",
+      "toPort": "a",
+      "label": "XL",
+      "points": []
+    },
+    {
+      "id": "w110",
+      "from": "plus_106",
+      "fromPort": "b",
+      "to": "minus_72",
+      "toPort": "out",
+      "label": "XR",
+      "points": []
+    },
+    {
+      "id": "w111",
+      "from": "leq_84",
+      "fromPort": "right",
+      "to": "plus_106",
+      "toPort": "b",
+      "label": "XR",
+      "points": []
+    },
+    {
+      "id": "w_137",
+      "from": "iqInput_116",
+      "fromPort": "io",
+      "to": "minus_118",
+      "toPort": "a",
+      "label": "F2",
+      "points": []
+    },
+    {
+      "id": "w_138",
+      "from": "iqInput_116",
+      "fromPort": "io",
+      "to": "minus_117",
+      "toPort": "a",
+      "label": "F2",
+      "points": []
+    },
+    {
+      "id": "w_139",
+      "from": "iqInput_115",
+      "fromPort": "io",
+      "to": "minus_117",
+      "toPort": "b",
+      "label": "Cin",
+      "points": []
+    },
+    {
+      "id": "w_142",
+      "from": "iqInput_115",
+      "fromPort": "io",
+      "to": "minus_121",
+      "toPort": "b",
+      "label": "Cin",
+      "points": []
+    },
+    {
+      "id": "w_143",
+      "from": "minus_119",
+      "fromPort": "a",
+      "to": "minus_120",
+      "toPort": "a",
+      "label": "AxorB",
+      "points": [
+        {
+          "x": 2376.4348639017894,
+          "y": 862.5665940866041
+        }
+      ]
+    },
+    {
+      "id": "w_144",
+      "from": "minus_121",
+      "fromPort": "b",
+      "to": "minus_120",
+      "toPort": "b",
+      "label": "Cin",
+      "points": [
+        {
+          "x": 2376.4348639017894,
+          "y": 1102.3752095891891
+        }
+      ]
+    },
+    {
+      "id": "w_145",
+      "from": "minus_118",
+      "fromPort": "out",
+      "to": "minus_121",
+      "toPort": "a",
+      "label": "nA2",
+      "points": []
+    },
+    {
+      "id": "w_146",
+      "from": "minus_117",
+      "fromPort": "out",
+      "to": "minus_119",
+      "toPort": "b",
+      "label": "nB2",
+      "points": []
+    },
+    {
+      "id": "w_147",
+      "from": "minus_121",
+      "fromPort": "out",
+      "to": "leq_122",
+      "toPort": "left",
+      "label": "nAB2",
+      "points": []
+    },
+    {
+      "id": "w_148",
+      "from": "leq_123",
+      "fromPort": "left",
+      "to": "minus_120",
+      "toPort": "out",
+      "label": "AB2",
+      "points": []
+    },
+    {
+      "id": "w_149",
+      "from": "leq_124",
+      "fromPort": "left",
+      "to": "minus_119",
+      "toPort": "out",
+      "label": "AnB2",
+      "points": []
+    },
+    {
+      "id": "w_150",
+      "from": "leq_125",
+      "fromPort": "right",
+      "to": "minus_128",
+      "toPort": "b",
+      "label": "eAnB2",
+      "points": []
+    },
+    {
+      "id": "w_151",
+      "from": "minus_128",
+      "fromPort": "b",
+      "to": "leq_124",
+      "toPort": "right",
+      "label": "eAnB2",
+      "points": []
+    },
+    {
+      "id": "w_152",
+      "from": "leq_123",
+      "fromPort": "right",
+      "to": "minus_129",
+      "toPort": "b",
+      "label": "eAB2",
+      "points": []
+    },
+    {
+      "id": "w_153",
+      "from": "minus_129",
+      "fromPort": "b",
+      "to": "leq_126",
+      "toPort": "right",
+      "label": "eAB2",
+      "points": []
+    },
+    {
+      "id": "w_154",
+      "from": "leq_122",
+      "fromPort": "right",
+      "to": "minus_130",
+      "toPort": "b",
+      "label": "enAB2",
+      "points": []
+    },
+    {
+      "id": "w_155",
+      "from": "minus_130",
+      "fromPort": "b",
+      "to": "leq_127",
+      "toPort": "right",
+      "label": "enAB2",
+      "points": []
+    },
+    {
+      "id": "w_158",
+      "from": "minus_118",
+      "fromPort": "out",
+      "to": "minus_130",
+      "toPort": "a",
+      "label": "nA2",
+      "points": [
+        {
+          "x": 2385.6310081034217,
+          "y": 1215.866112715282
+        },
+        {
+          "x": 2732.7209751138207,
+          "y": 1222.414980017365
+        }
+      ]
+    },
+    {
+      "id": "w_161",
+      "from": "plus_135",
+      "fromPort": "a",
+      "to": "minus_128",
+      "toPort": "out",
+      "label": "XL2",
+      "points": []
+    },
+    {
+      "id": "w_162",
+      "from": "leq_131",
+      "fromPort": "right",
+      "to": "plus_135",
+      "toPort": "a",
+      "label": "XL2",
+      "points": []
+    },
+    {
+      "id": "w_163",
+      "from": "plus_135",
+      "fromPort": "b",
+      "to": "minus_130",
+      "toPort": "out",
+      "label": "XR2",
+      "points": []
+    },
+    {
+      "id": "w_164",
+      "from": "leq_133",
+      "fromPort": "right",
+      "to": "plus_135",
+      "toPort": "b",
+      "label": "XR2",
+      "points": []
+    },
+    {
+      "id": "w_165",
+      "from": "plus_135",
+      "fromPort": "out",
+      "to": "iqOutput_136",
+      "toPort": "io",
+      "label": "Sum",
+      "points": []
+    },
+    {
+      "id": "w166",
+      "from": "minus_71",
+      "fromPort": "out",
+      "to": "leq_83",
+      "toPort": "right",
+      "label": "carry1",
+      "points": [
+        {
+          "x": 1482.0714932920414,
+          "y": 953.9114206319622
+        }
+      ]
+    },
+    {
+      "id": "w168",
+      "from": "minus_119",
+      "fromPort": "a",
+      "to": "minus_128",
+      "toPort": "a",
+      "label": "AxorB",
+      "points": [
+        {
+          "x": 2263.023919065439,
+          "y": 701.7800295017668
+        },
+        {
+          "x": 2757.463400372705,
+          "y": 708.3288968038497
+        }
+      ]
+    },
+    {
+      "id": "w169",
+      "from": "minus_129",
+      "fromPort": "a",
+      "to": "minus_119",
+      "toPort": "a",
+      "label": "AxorB",
+      "points": [
+        {
+          "x": 2709.9841124326035,
+          "y": 736.1615828377026
+        },
+        {
+          "x": 2274.484436844084,
+          "y": 745.984883790827
+        }
+      ]
+    },
+    {
+      "id": "w170",
+      "from": "plus_106",
+      "fromPort": "out",
+      "to": "minus_119",
+      "toPort": "a",
+      "label": "AxorB",
+      "points": [
+        {
+          "x": 2002.7064438076397,
+          "y": 806.5619063350947
+        }
+      ]
+    },
+    {
+      "id": "w_239",
+      "from": "iqInput_220",
+      "fromPort": "io",
+      "to": "minus_222",
+      "toPort": "a",
+      "label": "F3",
+      "points": []
+    },
+    {
+      "id": "w_240",
+      "from": "iqInput_220",
+      "fromPort": "io",
+      "to": "minus_221",
+      "toPort": "a",
+      "label": "F3",
+      "points": []
+    },
+    {
+      "id": "w_247",
+      "from": "minus_222",
+      "fromPort": "out",
+      "to": "minus_225",
+      "toPort": "a",
+      "label": "nA3",
+      "points": []
+    },
+    {
+      "id": "w_248",
+      "from": "minus_221",
+      "fromPort": "out",
+      "to": "minus_223",
+      "toPort": "b",
+      "label": "nB3",
+      "points": []
+    },
+    {
+      "id": "w_249",
+      "from": "minus_225",
+      "fromPort": "out",
+      "to": "leq_226",
+      "toPort": "left",
+      "label": "nAB3",
+      "points": []
+    },
+    {
+      "id": "w_251",
+      "from": "leq_228",
+      "fromPort": "left",
+      "to": "minus_223",
+      "toPort": "out",
+      "label": "AnB3",
+      "points": []
+    },
+    {
+      "id": "w_252",
+      "from": "leq_229",
+      "fromPort": "right",
+      "to": "minus_232",
+      "toPort": "b",
+      "label": "eAnB3",
+      "points": []
+    },
+    {
+      "id": "w_253",
+      "from": "minus_232",
+      "fromPort": "b",
+      "to": "leq_228",
+      "toPort": "right",
+      "label": "eAnB3",
+      "points": []
+    },
+    {
+      "id": "w_256",
+      "from": "leq_226",
+      "fromPort": "right",
+      "to": "minus_234",
+      "toPort": "b",
+      "label": "enAB3",
+      "points": []
+    },
+    {
+      "id": "w_257",
+      "from": "minus_234",
+      "fromPort": "b",
+      "to": "leq_231",
+      "toPort": "right",
+      "label": "enAB3",
+      "points": []
+    },
+    {
+      "id": "w_260",
+      "from": "minus_222",
+      "fromPort": "out",
+      "to": "minus_234",
+      "toPort": "a",
+      "label": "nA3",
+      "points": [
+        {
+          "x": 3878.588580102272,
+          "y": 1215.866112715282
+        },
+        {
+          "x": 4225.6785471126705,
+          "y": 1222.414980017365
+        }
+      ]
+    },
+    {
+      "id": "w_261",
+      "from": "plus_238",
+      "fromPort": "a",
+      "to": "minus_232",
+      "toPort": "out",
+      "label": "XL3",
+      "points": []
+    },
+    {
+      "id": "w_262",
+      "from": "leq_235",
+      "fromPort": "right",
+      "to": "plus_238",
+      "toPort": "a",
+      "label": "XL3",
+      "points": []
+    },
+    {
+      "id": "w_263",
+      "from": "plus_238",
+      "fromPort": "b",
+      "to": "minus_234",
+      "toPort": "out",
+      "label": "XR3",
+      "points": []
+    },
+    {
+      "id": "w_264",
+      "from": "leq_237",
+      "fromPort": "right",
+      "to": "plus_238",
+      "toPort": "b",
+      "label": "XR3",
+      "points": []
+    },
+    {
+      "id": "w113",
+      "from": "plus_238",
+      "fromPort": "out",
+      "to": "iqOutput_112",
+      "toPort": "io",
+      "label": "Carry",
+      "points": []
+    },
+    {
+      "id": "w265",
+      "from": "minus_71",
+      "fromPort": "out",
+      "to": "minus_223",
+      "toPort": "a",
+      "label": "carry1",
+      "points": [
+        {
+          "x": 1513.9075195656908,
+          "y": 646.2080428285568
+        },
+        {
+          "x": 3661.0322030354573,
+          "y": 672.3040889477032
+        }
+      ]
+    },
+    {
+      "id": "w266",
+      "from": "minus_223",
+      "fromPort": "a",
+      "to": "minus_232",
+      "toPort": "a",
+      "label": "carry1",
+      "points": [
+        {
+          "x": 3859.6521096089605,
+          "y": 839.0288280422496
+        },
+        {
+          "x": 3861.101889948913,
+          "y": 725.9459615259486
+        },
+        {
+          "x": 4243.843899696393,
+          "y": 728.8455222058537
+        }
+      ]
+    },
+    {
+      "id": "w268",
+      "from": "minus_129",
+      "fromPort": "out",
+      "to": "leq_132",
+      "toPort": "right",
+      "label": "carry2",
+      "points": [
+        {
+          "x": 3007.1812697168452,
+          "y": 986.9064227174125
+        }
+      ]
+    },
+    {
+      "id": "w269",
+      "from": "leq_132",
+      "fromPort": "right",
+      "to": "minus_221",
+      "toPort": "b",
+      "label": "carry2",
+      "points": [
+        {
+          "x": 3198.5522745905855,
+          "y": 1194.225011330631
+        }
+      ]
+    },
+    {
+      "id": "w270",
+      "from": "minus_221",
+      "fromPort": "b",
+      "to": "minus_225",
+      "toPort": "b",
+      "label": "carry2",
+      "points": [
+        {
+          "x": 3553.7484578789667,
+          "y": 1069.5439020947094
+        },
+        {
+          "x": 3552.298677539014,
+          "y": 1172.4783062313422
+        },
+        {
+          "x": 3703.075832894082,
+          "y": 1173.928086571295
+        }
+      ]
+    },
+    {
+      "id": "w277",
+      "from": "minus_119",
+      "fromPort": "a",
+      "to": "minus_118",
+      "toPort": "b",
+      "label": "AxorB",
+      "points": [
+        {
+          "x": 2019.3620265722873,
+          "y": 742.9546381126605
+        }
+      ]
+    }
+  ]
+}
