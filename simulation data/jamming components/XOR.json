@@ -3,9 +3,9 @@
   "version": 1,
   "scenarioCount": 4,
   "view": {
-    "panX": 189,
-    "panY": -71,
-    "zoom": 1
+    "panX": 247.21099787711285,
+    "panY": -4.755269159282477,
+    "zoom": 0.8015685569471257
   },
   "nodes": [
     {
@@ -43,14 +43,16 @@
       "kind": "minus",
       "x": 306,
       "y": 156,
-      "label": ""
+      "label": "",
+      "color": "#16a34a"
     },
     {
       "id": "minus_25",
       "kind": "minus",
       "x": 305,
       "y": 275,
-      "label": ""
+      "label": "",
+      "color": "#e11d48"
     },
     {
       "id": "leq_31",
@@ -58,6 +60,7 @@
       "x": 332,
       "y": 391,
       "label": "",
+      "color": "#e11d48",
       "rail": "G"
     },
     {
@@ -80,6 +83,7 @@
       "x": 313,
       "y": 66,
       "label": "",
+      "color": "#16a34a",
       "rail": "G"
     }
   ],
@@ -126,7 +130,7 @@
       "fromPort": "out",
       "to": "plus_33",
       "toPort": "a",
-      "label": "t1",
+      "label": "XL",
       "points": []
     },
     {
@@ -135,7 +139,7 @@
       "fromPort": "b",
       "to": "minus_25",
       "toPort": "out",
-      "label": "t2",
+      "label": "XR",
       "points": []
     },
     {
@@ -153,7 +157,7 @@
       "fromPort": "right",
       "to": "plus_33",
       "toPort": "b",
-      "label": "t2",
+      "label": "XR",
       "points": []
     },
     {
@@ -162,7 +166,7 @@
       "fromPort": "right",
       "to": "plus_33",
       "toPort": "a",
-      "label": "t1",
+      "label": "XL",
       "points": []
     }
   ]
