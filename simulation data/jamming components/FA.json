@@ -1,0 +1,493 @@
+{
+  "kind": "inequalities",
+  "version": 1,
+  "scenarioCount": 4,
+  "view": {
+    "panX": 80.20062477100964,
+    "panY": 203.2922795385565,
+    "zoom": 0.614425205293427
+  },
+  "nodes": [
+    {
+      "id": "leq_1",
+      "kind": "leq",
+      "x": 439.78993088175537,
+      "y": 274.58693902728714,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "minus_2",
+      "kind": "minus",
+      "x": 323.7855235745319,
+      "y": 173,
+      "label": ""
+    },
+    {
+      "id": "iqInput_4",
+      "kind": "iqInput",
+      "x": -213.18709997624478,
+      "y": 262.4695512218298,
+      "label": "B",
+      "values": [
+        "0",
+        "1",
+        "0",
+        "1"
+      ],
+      "pattern": "binary",
+      "bit": 0
+    },
+    {
+      "id": "iqOutput_5",
+      "kind": "iqOutput",
+      "x": 525.392761787266,
+      "y": 185,
+      "label": "AND"
+    },
+    {
+      "id": "iqInput_10",
+      "kind": "iqInput",
+      "x": -214.55956257806398,
+      "y": 175.33186423092553,
+      "label": "F",
+      "values": [
+        "1",
+        "1",
+        "1",
+        "1"
+      ]
+    },
+    {
+      "id": "minus_15",
+      "kind": "minus",
+      "x": 123,
+      "y": 238,
+      "label": ""
+    },
+    {
+      "id": "iqInput_20",
+      "kind": "iqInput",
+      "x": -215.6557185921919,
+      "y": 87.60283090551061,
+      "label": "A",
+      "values": [
+        "0",
+        "0",
+        "1",
+        "1"
+      ],
+      "pattern": "binary",
+      "bit": 1
+    },
+    {
+      "id": "minus_21",
+      "kind": "minus",
+      "x": 117.95592692776574,
+      "y": -103.70165687619159,
+      "label": "",
+      "color": "#16a34a"
+    },
+    {
+      "id": "minus_25",
+      "kind": "minus",
+      "x": 118.5834643259465,
+      "y": -0.9770308580001483,
+      "label": "",
+      "color": "#e11d48"
+    },
+    {
+      "id": "leq_31",
+      "kind": "leq",
+      "x": 235.09802122589343,
+      "y": 102.002669956553,
+      "label": "",
+      "color": "#e11d48",
+      "rail": "G"
+    },
+    {
+      "id": "plus_33",
+      "kind": "plus",
+      "x": 325.8791374932019,
+      "y": -54.21180646891504,
+      "label": ""
+    },
+    {
+      "id": "leq_40",
+      "kind": "leq",
+      "x": 238.88354480042528,
+      "y": -177.42628289438312,
+      "label": "",
+      "color": "#16a34a",
+      "rail": "G"
+    },
+    {
+      "id": "leq_42",
+      "kind": "leq",
+      "x": 1352.8552357453193,
+      "y": 274.58693902728714,
+      "label": "",
+      "rail": "G"
+    },
+    {
+      "id": "minus_43",
+      "kind": "minus",
+      "x": 1236.850828438096,
+      "y": 173,
+      "label": ""
+    },
+    {
+      "id": "iqInput_44",
+      "kind": "iqInput",
+      "x": 699.8782048873192,
+      "y": 262.4695512218298,
+      "label": "Cin",
+      "values": [
+        "0",
+        "1",
+        "0",
+        "1"
+      ],
+      "pattern": "binary",
+      "bit": 0
+    },
+    {
+      "id": "iqOutput_45",
+      "kind": "iqOutput",
+      "x": 1438.45806665083,
+      "y": 185,
+      "label": "AND2"
+    },
+    {
+      "id": "iqInput_46",
+      "kind": "iqInput",
+      "x": 698.5057422855,
+      "y": 175.33186423092553,
+      "label": "F",
+      "values": [
+        "1",
+        "1",
+        "1",
+        "1"
+      ]
+    },
+    {
+      "id": "minus_47",
+      "kind": "minus",
+      "x": 1036.065304863564,
+      "y": 238,
+      "label": ""
+    },
+    {
+      "id": "minus_49",
+      "kind": "minus",
+      "x": 1031.0212317913297,
+      "y": -103.70165687619159,
+      "label": "",
+      "color": "#16a34a"
+    },
+    {
+      "id": "minus_50",
+      "kind": "minus",
+      "x": 1031.6487691895104,
+      "y": -0.9770308580001483,
+      "label": "",
+      "color": "#e11d48"
+    },
+    {
+      "id": "leq_51",
+      "kind": "leq",
+      "x": 1148.1633260894573,
+      "y": 102.002669956553,
+      "label": "",
+      "color": "#e11d48",
+      "rail": "G"
+    },
+    {
+      "id": "plus_52",
+      "kind": "plus",
+      "x": 1238.9444423567659,
+      "y": -54.21180646891504,
+      "label": ""
+    },
+    {
+      "id": "iqOutput_53",
+      "kind": "iqOutput",
+      "x": 1438.4748911349361,
+      "y": -41.83934386709591,
+      "label": "Sum"
+    },
+    {
+      "id": "leq_54",
+      "kind": "leq",
+      "x": 1151.9488496639892,
+      "y": -177.42628289438312,
+      "label": "",
+      "color": "#16a34a",
+      "rail": "G"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w8",
+      "from": "minus_2",
+      "fromPort": "out",
+      "to": "iqOutput_5",
+      "toPort": "io",
+      "label": "AND",
+      "points": []
+    },
+    {
+      "id": "w9",
+      "from": "iqOutput_5",
+      "fromPort": "io",
+      "to": "leq_1",
+      "toPort": "right",
+      "label": "AND",
+      "points": []
+    },
+    {
+      "id": "w16",
+      "from": "iqInput_10",
+      "fromPort": "io",
+      "to": "minus_15",
+      "toPort": "a",
+      "label": "F",
+      "points": []
+    },
+    {
+      "id": "w17",
+      "from": "minus_15",
+      "fromPort": "b",
+      "to": "iqInput_4",
+      "toPort": "io",
+      "label": "B",
+      "points": []
+    },
+    {
+      "id": "w18",
+      "from": "minus_15",
+      "fromPort": "out",
+      "to": "minus_2",
+      "toPort": "b",
+      "label": "t1",
+      "points": []
+    },
+    {
+      "id": "w26",
+      "from": "iqInput_20",
+      "fromPort": "io",
+      "to": "minus_21",
+      "toPort": "a",
+      "label": "A",
+      "points": []
+    },
+    {
+      "id": "w29",
+      "from": "iqInput_20",
+      "fromPort": "io",
+      "to": "minus_25",
+      "toPort": "b",
+      "label": "A",
+      "points": []
+    },
+    {
+      "id": "w34",
+      "from": "minus_21",
+      "fromPort": "out",
+      "to": "plus_33",
+      "toPort": "a",
+      "label": "XL",
+      "points": []
+    },
+    {
+      "id": "w35",
+      "from": "plus_33",
+      "fromPort": "b",
+      "to": "minus_25",
+      "toPort": "out",
+      "label": "XR",
+      "points": []
+    },
+    {
+      "id": "w39",
+      "from": "leq_31",
+      "fromPort": "right",
+      "to": "plus_33",
+      "toPort": "b",
+      "label": "XR",
+      "points": []
+    },
+    {
+      "id": "w41",
+      "from": "leq_40",
+      "fromPort": "right",
+      "to": "plus_33",
+      "toPort": "a",
+      "label": "XL",
+      "points": []
+    },
+    {
+      "id": "w22",
+      "from": "iqInput_4",
+      "fromPort": "io",
+      "to": "minus_25",
+      "toPort": "a",
+      "label": "B",
+      "points": []
+    },
+    {
+      "id": "w23",
+      "from": "iqInput_4",
+      "fromPort": "io",
+      "to": "minus_21",
+      "toPort": "b",
+      "label": "B",
+      "points": []
+    },
+    {
+      "id": "w24",
+      "from": "minus_2",
+      "fromPort": "a",
+      "to": "iqInput_20",
+      "toPort": "io",
+      "label": "A",
+      "points": []
+    },
+    {
+      "id": "w_55",
+      "from": "minus_43",
+      "fromPort": "out",
+      "to": "iqOutput_45",
+      "toPort": "io",
+      "label": "AND2",
+      "points": []
+    },
+    {
+      "id": "w_56",
+      "from": "iqOutput_45",
+      "fromPort": "io",
+      "to": "leq_42",
+      "toPort": "right",
+      "label": "AND2",
+      "points": []
+    },
+    {
+      "id": "w_57",
+      "from": "iqInput_46",
+      "fromPort": "io",
+      "to": "minus_47",
+      "toPort": "a",
+      "label": "F",
+      "points": []
+    },
+    {
+      "id": "w_58",
+      "from": "minus_47",
+      "fromPort": "b",
+      "to": "iqInput_44",
+      "toPort": "io",
+      "label": "Cin",
+      "points": []
+    },
+    {
+      "id": "w_59",
+      "from": "minus_47",
+      "fromPort": "out",
+      "to": "minus_43",
+      "toPort": "b",
+      "label": "t12",
+      "points": []
+    },
+    {
+      "id": "w_62",
+      "from": "minus_49",
+      "fromPort": "out",
+      "to": "plus_52",
+      "toPort": "a",
+      "label": "XL2",
+      "points": []
+    },
+    {
+      "id": "w_63",
+      "from": "plus_52",
+      "fromPort": "b",
+      "to": "minus_50",
+      "toPort": "out",
+      "label": "XR2",
+      "points": []
+    },
+    {
+      "id": "w_64",
+      "from": "iqOutput_53",
+      "fromPort": "io",
+      "to": "plus_52",
+      "toPort": "out",
+      "label": "Sum",
+      "points": []
+    },
+    {
+      "id": "w_65",
+      "from": "leq_51",
+      "fromPort": "right",
+      "to": "plus_52",
+      "toPort": "b",
+      "label": "XR2",
+      "points": []
+    },
+    {
+      "id": "w_66",
+      "from": "leq_54",
+      "fromPort": "right",
+      "to": "plus_52",
+      "toPort": "a",
+      "label": "XL2",
+      "points": []
+    },
+    {
+      "id": "w_67",
+      "from": "iqInput_44",
+      "fromPort": "io",
+      "to": "minus_50",
+      "toPort": "a",
+      "label": "Cin",
+      "points": []
+    },
+    {
+      "id": "w_68",
+      "from": "iqInput_44",
+      "fromPort": "io",
+      "to": "minus_49",
+      "toPort": "b",
+      "label": "Cin",
+      "points": []
+    },
+    {
+      "id": "w70",
+      "from": "minus_49",
+      "fromPort": "a",
+      "to": "plus_33",
+      "toPort": "out",
+      "label": "XOR",
+      "points": []
+    },
+    {
+      "id": "w71",
+      "from": "minus_50",
+      "fromPort": "b",
+      "to": "plus_33",
+      "toPort": "out",
+      "label": "XOR",
+      "points": []
+    },
+    {
+      "id": "w72",
+      "from": "minus_43",
+      "fromPort": "a",
+      "to": "plus_33",
+      "toPort": "out",
+      "label": "XOR",
+      "points": []
+    }
+  ]
+}

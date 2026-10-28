@@ -2852,7 +2852,26 @@
     }
   }
   function applySignalName(start, name) {
-    unifySignal(signalMembers(start), name);
+    if (!start) return;
+    if (start.kind && isIneqEndpoint(start)) {
+      unifySignal(signalMembers(start), name);
+      return;
+    }
+    if (String(name || "").trim()) {
+      unifySignal(signalMembers(start), name);
+      return;
+    }
+    start.label = "";
+  }
+  function refreshSignalAfterEndpointRemoved(leftoverWires) {
+    const seen = /* @__PURE__ */ new Set();
+    for (const seed of leftoverWires) {
+      if (!seed || !wires.some((w) => w.id === seed.id) || seen.has(seed.id)) continue;
+      const group = signalMembers(seed);
+      for (const w of group.wires) seen.add(w.id);
+      if (!group.blocks.some(isIneqEndpoint)) continue;
+      unifySignal(group, preferredSignalName(group));
+    }
   }
   function signalGroups() {
     const seenW = /* @__PURE__ */ new Set();
@@ -4548,17 +4567,24 @@
       wires = wires.filter((w) => w.id !== selectedWireId);
       selectedWireId = null;
       setStatus("Removed wire.");
+      syncRpmPanel();
       draw();
       return;
     }
     if (!selectedId) return;
     const id = selectedId;
+    const doomed = nodes.find((n) => n.id === id);
+    let leftover = [];
+    if (appMode === "inequalities" && doomed && isIneqEndpoint(doomed)) {
+      leftover = signalMembers(doomed).wires.filter((w) => w.from !== id && w.to !== id);
+    }
     nodes = nodes.filter((n) => n.id !== id);
     wires = wires.filter((w) => w.from !== id && w.to !== id);
     if (wireFrom && wireFrom.nodeId === id) wireFrom = null;
     if (selectedWireId && !wires.some((w) => w.id === selectedWireId)) selectedWireId = null;
     selectedId = null;
     columnOrder = columnOrder.filter((key) => !key.startsWith(`${id}:`));
+    if (leftover.length) refreshSignalAfterEndpointRemoved(leftover);
     setStatus("Removed block.");
     syncRpmPanel();
     if (scenarioRows.length) renderTruth();
@@ -4594,7 +4620,11 @@
     const target = e.target;
     const nameField = target && (target.id === "ineqName" || target.id === "nodeLabel");
     if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
-      if (!nameField || target.value !== "") return;
+      if (selectedWireId && e.key === "Delete" && nameField) {
+        /* Delete removes the selected wire even when the name field has text. */
+      } else if (!nameField || target.value !== "") {
+        return;
+      }
     }
     if (!selectedId && !selectedWireId) return;
     e.preventDefault();
