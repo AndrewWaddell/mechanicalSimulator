@@ -1618,12 +1618,12 @@
       selectedWireId = wire.id;
       selectedCorner = null;
       selectedId = null;
+      pendingNameFocus = false;
       setStatus("Wire selected. Name it in the sidebar, or press Delete to remove it.");
       syncRpmPanel();
       if (appMode === "inequalities") {
-        e.preventDefault();
-        pendingNameFocus = true;
-        focusNameField();
+        const active = document.activeElement;
+        if (active && (active.id === "ineqName" || active.id === "nodeLabel") && active.blur) active.blur();
       }
       draw();
       return;
@@ -4619,12 +4619,13 @@
     if (e.key !== "Delete" && e.key !== "Backspace") return;
     const target = e.target;
     const nameField = target && (target.id === "ineqName" || target.id === "nodeLabel");
+    if (selectedWireId && e.key === "Delete") {
+      e.preventDefault();
+      deleteSelected();
+      return;
+    }
     if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
-      if (selectedWireId && e.key === "Delete" && nameField) {
-        /* Delete removes the selected wire even when the name field has text. */
-      } else if (!nameField || target.value !== "") {
-        return;
-      }
+      if (!nameField || target.value !== "") return;
     }
     if (!selectedId && !selectedWireId) return;
     e.preventDefault();
